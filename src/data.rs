@@ -65,48 +65,33 @@ pub struct PriceDb {
 }
 
 impl PriceDb {
-    /// Open (or create) the SQLite database at `path` and ensure tables exist.
-    pub async fn open(path: &str) -> Result<Self> {
-        let url = format!("sqlite:{}?mode=rwc", path);
+    /// Open (or create) the SQLite database at `db_path` and run embedded migrations.
+    pub async fn open(db_path: &str) -> Result<Self> {
+        let url = format!("sqlite:{}?mode=rwc", db_path);
         let pool = SqlitePoolOptions::new()
             .max_connections(4)
             .connect(&url)
             .await?;
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS prices (
-                ticker TEXT NOT NULL,
-                date   TEXT NOT NULL,
-                close  REAL NOT NULL,
-                PRIMARY KEY (ticker, date)
-            )",
-        )
-        .execute(&pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS metadata (
-                key   TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )",
-        )
-        .execute(&pool)
-        .await?;
+        sqlx::migrate!().run(&pool).await?;
 
         Ok(Self { pool })
     }
 
     /// Return the latest cached date for each ticker that has data.
     pub async fn latest_dates(&self) -> Result<HashMap<String, NaiveDate>> {
-        let rows: Vec<(String, String)> =
-            sqlx::query_as("SELECT ticker, MAX(date) FROM prices GROUP BY ticker")
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = sqlx::query!(
+            "SELECT ticker, MAX(date) as max_date FROM prices GROUP BY ticker"
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut map = HashMap::new();
-        for (ticker, date_str) in rows {
-            if let Ok(date) = date_str.parse::<NaiveDate>() {
-                map.insert(ticker, date);
+        for row in rows {
+            if let Some(ticker) = row.ticker {
+                if let Ok(date) = row.max_date.parse::<NaiveDate>() {
+                    map.insert(ticker, date);
+                }
             }
         }
         Ok(map)
@@ -122,23 +107,25 @@ impl PriceDb {
 
         for (ticker, series) in prices {
             for (date, close) in series {
-                sqlx::query(
+                let date_str = date.to_string();
+                sqlx::query!(
                     "INSERT INTO prices (ticker, date, close) VALUES (?, ?, ?)
                      ON CONFLICT(ticker, date) DO UPDATE SET close = excluded.close",
+                    ticker,
+                    date_str,
+                    close,
                 )
-                .bind(ticker)
-                .bind(date.to_string())
-                .bind(close)
                 .execute(&mut *tx)
                 .await?;
             }
         }
 
-        sqlx::query(
+        let ts = last_updated.to_rfc3339();
+        sqlx::query!(
             "INSERT INTO metadata (key, value) VALUES ('last_updated', ?)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            ts,
         )
-        .bind(last_updated.to_rfc3339())
         .execute(&mut *tx)
         .await?;
 
@@ -149,29 +136,32 @@ impl PriceDb {
 
     /// Load all cached prices. Returns `None` if the cache is empty.
     pub async fn load_prices(&self) -> Result<Option<(WeeklyPrices, DateTime<Utc>)>> {
-        let last_updated: Option<String> =
-            sqlx::query_scalar("SELECT value FROM metadata WHERE key = 'last_updated'")
-                .fetch_optional(&self.pool)
-                .await?;
+        let row = sqlx::query_scalar!(
+            "SELECT value FROM metadata WHERE key = 'last_updated'"
+        )
+        .fetch_optional(&self.pool)
+        .await?;
 
-        let last_updated = match last_updated {
+        let last_updated = match row {
             Some(s) => s.parse::<DateTime<Utc>>()?,
             None => return Ok(None),
         };
 
-        let rows: Vec<(String, String, f64)> =
-            sqlx::query_as("SELECT ticker, date, close FROM prices ORDER BY ticker, date")
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = sqlx::query!(
+            "SELECT ticker, date, close FROM prices ORDER BY ticker, date"
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         if rows.is_empty() {
             return Ok(None);
         }
 
         let mut prices = WeeklyPrices::new();
-        for (ticker, date_str, close) in rows {
-            let date = date_str.parse::<NaiveDate>()?;
-            prices.entry(ticker).or_default().push((date, close));
+        for row in rows {
+            let date = row.date.parse::<NaiveDate>()?;
+            let close = row.close;
+            prices.entry(row.ticker).or_default().push((date, close));
         }
 
         Ok(Some((prices, last_updated)))
