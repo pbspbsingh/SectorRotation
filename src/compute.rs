@@ -1,7 +1,8 @@
 /// compute.rs — RRG, RS Rankings, and Z-Score computation
-use crate::data::{align, prices_only, WeeklyPrices};
+use crate::data::{align, prices_only, PriceMap};
 use serde::Serialize;
 use std::collections::HashMap;
+use tracing::warn;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIMEFRAME PARAMETERS
@@ -22,30 +23,52 @@ pub struct Timeframe {
     pub z_long: usize,
 }
 
+/// Parameters calibrated for DAILY bars.
+/// Each value is the weekly equivalent × 5 trading days.
 pub const DAILY: Timeframe = Timeframe {
-    ema_short: 10,
-    ema_long: 40,
-    mom_lookback: 20,
-    tail_len: 25,
-    win_short: 20,
-    win_med: 63,
-    win_long: 126,
-    rank_change_lookback: 20,
-    z_short: 20,
-    z_long: 63,
+    // RRG — EMA spans (10w and 40w converted to days)
+    ema_short: 50, // 10 weeks × 5
+    ema_long: 200, // 40 weeks × 5
+
+    // RRG — momentum lookback (de Kempenaer: 4 weeks)
+    mom_lookback: 20, // 4 weeks × 5
+
+    // RRG — tail history shown on the graph (de Kempenaer: 5 weeks)
+    tail_len: 25, // 5 weeks × 5
+
+    // Rankings — relative return windows
+    win_short: 20, // 1 month  (~4 weeks)
+    win_med: 63,   // 1 quarter (~13 weeks)
+    win_long: 126, // 6 months  (~26 weeks)
+
+    // Rankings — lookback for rank change detection (4 weeks ago)
+    rank_change_lookback: 20, // 4 weeks × 5
+
+    // Z-Score — relative return windows
+    z_short: 20, // 1 month
+    z_long: 63,  // 1 quarter
 };
 
+/// Parameters calibrated for WEEKLY bars.
+/// These are de Kempenaer's original published defaults.
 pub const WEEKLY: Timeframe = Timeframe {
-    ema_short: 10,
-    ema_long: 40,
-    mom_lookback: 4,
-    tail_len: 5,
-    win_short: 4,
-    win_med: 13,
-    win_long: 26,
-    rank_change_lookback: 4,
-    z_short: 4,
-    z_long: 13,
+    // RRG
+    ema_short: 10,   // 10 weeks (~2.5 months)
+    ema_long: 40,    // 40 weeks (~10 months)
+    mom_lookback: 4, // 4 weeks  (de Kempenaer standard)
+    tail_len: 5,     // 5 weeks  (de Kempenaer standard)
+
+    // Rankings
+    win_short: 4, // 1 month
+    win_med: 13,  // 1 quarter
+    win_long: 26, // 6 months
+
+    // Rankings
+    rank_change_lookback: 4, // 4 weeks ago
+
+    // Z-Score
+    z_short: 4, // 1 month
+    z_long: 13, // 1 quarter
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,14 +138,19 @@ pub struct ConvergenceEntry {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn ema(values: &[f64], span: usize) -> Vec<f64> {
-    if values.is_empty() {
-        return vec![];
+    let n = values.len();
+    if span == 0 || n < span {
+        return vec![f64::NAN; n];
     }
+
     let alpha = 2.0 / (span as f64 + 1.0);
-    let mut result = vec![0.0; values.len()];
-    result[0] = values[0];
-    for i in 1..values.len() {
-        result[i] = alpha * values[i] + (1.0 - alpha) * result[i - 1];
+    let initial_sma = values[..span].iter().sum::<f64>() / (span as f64);
+    let mut result = vec![initial_sma; n];
+    let mut prev = initial_sma;
+    for i in span..n {
+        let cur = (values[i] - prev).mul_add(alpha, prev);
+        result[i] = cur;
+        prev = cur;
     }
     result
 }
@@ -159,7 +187,7 @@ fn round2(v: f64) -> f64 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn compute_rrg(
-    prices: &WeeklyPrices,
+    prices: &PriceMap,
     benchmark: &str,
     tickers: &[(&str, &str)],
     tf: &Timeframe,
@@ -171,14 +199,15 @@ pub fn compute_rrg(
 
     let mut entries = Vec::new();
 
-    for (ticker, name) in tickers {
-        let sector_series = match prices.get(*ticker) {
+    for &(ticker, name) in tickers {
+        let sector_series = match prices.get(ticker) {
             Some(s) => s,
             None => continue,
         };
 
         let (aligned_sector, aligned_bench) = align(sector_series, bench_series);
         if aligned_sector.len() < tf.ema_long + tf.mom_lookback + tf.tail_len + 5 {
+            warn!("Less data found for {ticker}, skipping it");
             continue;
         }
 
@@ -256,7 +285,7 @@ fn classify_quadrant(ratio: f64, momentum: f64) -> String {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn compute_rankings(
-    prices: &WeeklyPrices,
+    prices: &PriceMap,
     benchmark: &str,
     tickers: &[(&str, &str)],
     tf: &Timeframe,
@@ -366,7 +395,7 @@ pub fn compute_rankings(
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn compute_zscores(
-    prices: &WeeklyPrices,
+    prices: &PriceMap,
     benchmark: &str,
     tickers: &[(&str, &str)],
     tf: &Timeframe,

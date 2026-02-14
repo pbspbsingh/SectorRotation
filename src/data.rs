@@ -57,7 +57,7 @@ struct YfQuote {
 pub type PriceSeries = Vec<(NaiveDate, f64)>;
 
 /// Map of ticker → weekly price series (Friday close)
-pub type WeeklyPrices = HashMap<String, PriceSeries>;
+pub type PriceMap = HashMap<String, PriceSeries>;
 
 // ─── SQLite cache ────────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ impl PriceDb {
     /// Upsert price rows — inserts new rows and updates existing ones on conflict.
     pub async fn upsert_prices(
         &self,
-        prices: &WeeklyPrices,
+        prices: &PriceMap,
         last_updated: DateTime<Utc>,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
@@ -155,7 +155,7 @@ impl PriceDb {
     }
 
     /// Load all cached prices. Returns `None` if the cache is empty.
-    pub async fn load_prices(&self) -> Result<Option<(WeeklyPrices, DateTime<Utc>)>> {
+    pub async fn load_prices(&self) -> Result<Option<(PriceMap, DateTime<Utc>)>> {
         let row = sqlx::query_scalar!("SELECT value FROM metadata WHERE key = 'last_updated'")
             .fetch_optional(&self.pool)
             .await?;
@@ -173,7 +173,7 @@ impl PriceDb {
             return Ok(None);
         }
 
-        let mut prices = WeeklyPrices::new();
+        let mut prices = PriceMap::new();
         for row in rows {
             let date = row.date.parse::<NaiveDate>()?;
             let close = row.close;
@@ -197,18 +197,19 @@ impl PriceDb {
 pub async fn fetch_incremental(
     tickers: &[&str],
     cached_dates: &HashMap<String, NaiveDate>,
-) -> WeeklyPrices {
+) -> PriceMap {
     let client = Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         .cookie_store(true)
         .gzip(true)
         .deflate(true)
         .timeout(Duration::from_secs(15))
+        .use_rustls_tls()
         .build()
         .expect("Failed to build HTTP client");
 
     let today = Utc::now().date_naive();
-    let mut results = WeeklyPrices::new();
+    let mut results = PriceMap::new();
 
     for &ticker in tickers {
         if let Some(&latest) = cached_dates.get(ticker) {
@@ -221,12 +222,17 @@ pub async fn fetch_incremental(
         let since = cached_dates.get(ticker).copied();
         match fetch_weekly(&client, ticker, since).await {
             Ok(series) => {
-                info!(
-                    "Fetched {} new data points for {} (since {:?})",
-                    series.len(),
-                    ticker,
-                    since,
-                );
+                if let Some(since) = since {
+                    info!(
+                        "Fetched {} new data points for {} (since {})",
+                        series.len(),
+                        ticker,
+                        since,
+                    );
+                } else {
+                    info!("Fetched {} new data points for {}", series.len(), ticker);
+                }
+
                 if !series.is_empty() {
                     results.insert(ticker.to_string(), series);
                 }
@@ -375,7 +381,7 @@ pub fn resample_weekly(daily: &[(NaiveDate, f64)]) -> PriceSeries {
 }
 
 /// Resample an entire price map from daily to weekly.
-pub fn resample_all(daily: &WeeklyPrices) -> WeeklyPrices {
+pub fn resample_all(daily: &PriceMap) -> PriceMap {
     daily
         .iter()
         .map(|(ticker, series)| (ticker.clone(), resample_weekly(series)))
@@ -387,7 +393,7 @@ pub fn resample_all(daily: &WeeklyPrices) -> WeeklyPrices {
 /// Merge newly fetched rows into the existing in-memory price map.
 /// New rows for each ticker are appended (or overwritten for same-date duplicates),
 /// then sorted by date.
-pub fn merge_prices(existing: &mut WeeklyPrices, new: WeeklyPrices) {
+pub fn merge_prices(existing: &mut PriceMap, new: PriceMap) {
     for (ticker, new_series) in new {
         let entry = existing.entry(ticker).or_default();
         let existing_map: HashMap<NaiveDate, f64> = entry.iter().copied().collect();

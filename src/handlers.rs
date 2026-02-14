@@ -14,14 +14,14 @@ use crate::{
         RankEntry, RrgEntry, Timeframe, ZScoreEntry, DAILY, WEEKLY,
     },
     config::Config,
-    data::{align, fetch_incremental, merge_prices, resample_all, PriceDb, WeeklyPrices},
+    data::{align, fetch_incremental, merge_prices, resample_all, PriceDb, PriceMap},
 };
 
 // ─── Application State ────────────────────────────────────────────────────────
 
 pub struct AppState {
     pub config: Config,
-    pub prices: WeeklyPrices,
+    pub prices: PriceMap,
     pub last_updated: Option<chrono::DateTime<chrono::Utc>>,
     pub db: PriceDb,
 }
@@ -52,7 +52,7 @@ impl LayerQuery {
 }
 
 /// Prepare prices for the requested timeframe — daily as-is, weekly via resample.
-fn prices_for_timeframe(daily: &WeeklyPrices, query: &LayerQuery) -> WeeklyPrices {
+fn prices_for_timeframe(daily: &PriceMap, query: &LayerQuery) -> PriceMap {
     if query.is_weekly() {
         resample_all(daily)
     } else {
@@ -284,7 +284,7 @@ pub async fn get_detail(
     ))
 }
 
-fn build_price_history(prices: &WeeklyPrices, ticker: &str, benchmark: &str) -> Vec<PricePoint> {
+fn build_price_history(prices: &PriceMap, ticker: &str, benchmark: &str) -> Vec<PricePoint> {
     let (sec_series, bch_series) = match (prices.get(ticker), prices.get(benchmark)) {
         (Some(s), Some(b)) => (s, b),
         _ => return vec![],
