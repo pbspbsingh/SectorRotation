@@ -10,6 +10,7 @@ let selectedTicker = null;
 let drillSector = null; // when set, center shows only this sector's industry groups
 let expandedSectors = new Set(); // tracks which sectors are expanded in the tree
 
+let benchmark = 'SPY'; // fallback until universe loads
 let universe = [];
 let rrgData = [];
 let rankData = [];
@@ -111,8 +112,8 @@ function updateBreadcrumb() {
 // API
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function apiFetch(path) {
-  const r = await fetch(API + '/api' + path);
+async function apiFetch(path, signal) {
+  const r = await fetch(API + '/api' + path, { signal });
   if (!r.ok) throw new Error(`API ${path} returned ${r.status}`);
   return r.json();
 }
@@ -150,7 +151,10 @@ async function loadAll() {
       apiFetch('/rankings?layer=' + layer + tfParam),
       apiFetch('/zscore?layer=' + layer + tfParam),
     ]);
-    if (univ.ok) universe = univ.data.sectors;
+    if (univ.ok) {
+      benchmark = univ.data.benchmark;
+      universe = univ.data.sectors;
+    }
     if (rrg.ok) rrgData = rrg.data;
     if (rank.ok) rankData = rank.data;
     if (z.ok) zData = z.data;
@@ -167,13 +171,21 @@ async function loadAll() {
   if (selectedTicker) loadDetail(selectedTicker);
 }
 
+let detailAbortController = null;
 async function loadDetail(ticker) {
   selectedTicker = ticker;
+  if (detailAbortController) { detailAbortController.abort(); }
+  detailAbortController = new AbortController();
   try {
-    const resp = await apiFetch('/detail/' + ticker + '?timeframe=' + currentTimeframe);
+    const resp = await apiFetch(
+      '/detail/' + ticker + '?timeframe=' + currentTimeframe,
+      detailAbortController.signal
+    );
     if (resp.ok) renderDetail(resp.data);
   } catch (e) {
+    if (e.name === 'AbortError') return; // stale request — ignore
     console.error('loadDetail failed:', e);
+    setDetailError(ticker);
   }
 }
 
@@ -394,7 +406,7 @@ function renderRRG() {
     .selectAll('text,line,path').attr('stroke', '#2A3A4A').attr('fill', '#4A6070').attr('font-family', 'IBM Plex Mono').attr('font-size', '9');
 
   g.append('text').attr('x', width / 2).attr('y', height + 40).attr('text-anchor', 'middle').attr('fill', '#4A6070')
-    .attr('font-family', 'IBM Plex Mono').attr('font-size', '10').attr('letter-spacing', '0.08em').text('RS-RATIO  →  relative strength vs SPY');
+    .attr('font-family', 'IBM Plex Mono').attr('font-size', '10').attr('letter-spacing', '0.08em').text(`RS-RATIO  →  relative strength vs ${benchmark}`);
   g.append('text').attr('transform', 'rotate(-90)').attr('x', -height / 2).attr('y', -46)
     .attr('text-anchor', 'middle').attr('fill', '#4A6070').attr('font-family', 'IBM Plex Mono').attr('font-size', '10')
     .attr('letter-spacing', '0.08em').text('RS-MOMENTUM  →  acceleration');
@@ -465,9 +477,9 @@ function renderHeatmap() {
 
   function rankColor(rank) {
     const t = (rank - 1) / Math.max(n - 1, 1);
-    if (t < 0.33) return { bg: `rgba(0,230,118,${0.15 + 0.5 * (1 - t * 3)})`, text: '#fff' };
+    if (t < 0.33) return { bg: `rgba(0,230,118,${0.15 + 0.5 * (1 - t * 3)})`, text: '#00E676' };
     if (t < 0.67) return { bg: `rgba(255,214,0,0.15)`, text: '#FFD600' };
-    return { bg: `rgba(255,23,68,${0.15 + 0.5 * ((t - 0.67) * 3)})`, text: '#fff' };
+    return { bg: `rgba(255,23,68,${0.15 + 0.5 * ((t - 0.67) * 3)})`, text: '#FF1744' };
   }
 
   function trendArrow(t) {
@@ -638,7 +650,7 @@ function renderDetail(data) {
     const color = ratios[ratios.length - 1] >= ratios[0] ? '#00E676' : '#FF1744';
     return `
       <div class="detail-card">
-        <div class="detail-card-title">Relative Strength vs SPY (normalized)</div>
+        <div class="detail-card-title">Relative Strength vs ${benchmark} (normalized)</div>
         <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:80px;overflow:visible">
           <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.8"/>
           <line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" stroke="#1E2A38" stroke-width="0.5" stroke-dasharray="3,3"/>
@@ -659,7 +671,7 @@ function renderDetail(data) {
         <div class="kv"><div class="kv-key">QUADRANT</div><div class="kv-val">${quadBadge(rrg.quadrant)}</div></div>
         <div class="kv"><div class="kv-key">RS-RATIO</div><div class="kv-val" style="color:${rrg.current.rsRatio >= 100 ? '#00E676' : '#FF1744'}">${rrg.current.rsRatio.toFixed(2)}</div></div>
         <div class="kv"><div class="kv-key">RS-MOMENTUM</div><div class="kv-val" style="color:${rrg.current.rsMomentum >= 100 ? '#00E676' : '#FF1744'}">${rrg.current.rsMomentum.toFixed(2)}</div></div>
-        <div class="kv"><div class="kv-key">TAIL</div><div class="kv-val" style="font-size:11px;color:var(--text-dim)">${rrg.tail.length} weeks</div></div>
+        <div class="kv"><div class="kv-key">TAIL</div><div class="kv-val" style="font-size:11px;color:var(--text-dim)">${rrg.tail.length} ${currentTimeframe === 'weekly' ? 'weeks' : 'days'}</div></div>
       </div>
     </div>`;
 
@@ -730,7 +742,11 @@ async function init() {
     } else {
       setStatus('No data — click Refresh', false);
       const univ = await apiFetch('/universe');
-      if (univ.ok) { universe = univ.data.sectors; renderTree(); }
+      if (univ.ok) { 
+        benchmark = univ.data.benchmark;
+        universe = univ.data.sectors; 
+        renderTree(); 
+      }
     }
   } catch (e) {
     setStatus('Cannot reach server', false);

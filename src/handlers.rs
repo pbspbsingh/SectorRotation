@@ -314,6 +314,7 @@ fn build_price_history(prices: &PriceMap, ticker: &str, benchmark: &str) -> Vec<
 
 #[derive(Serialize)]
 pub struct UniverseResponse {
+    benchmark: String,
     sectors: Vec<SectorNode>,
 }
 
@@ -354,8 +355,9 @@ pub async fn get_universe(State(state): State<SharedState>) -> Json<ApiResponse<
             }
         })
         .collect();
-
-    ApiResponse::ok(UniverseResponse { sectors }, None)
+    
+    let benchmark = cfg.benchmark.clone();
+    ApiResponse::ok(UniverseResponse { benchmark, sectors }, None)
 }
 
 // ─── GET /api/status ──────────────────────────────────────────────────────────

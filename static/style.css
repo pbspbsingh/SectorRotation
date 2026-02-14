@@ -240,7 +240,7 @@ header {
 .heatmap-table th { padding: 4px 10px; text-align: center; font-size: 10px; color: var(--text-dim); font-weight: 400; letter-spacing: 0.05em; white-space: nowrap; }
 .heatmap-table td { padding: 2px; text-align: center; }
 .heatmap-cell { padding: 5px 10px; font-size: 11px; border-radius: 2px; font-weight: 500; min-width: 40px; }
-.heatmap-name { text-align: left; padding: 5px 14px; font-size: 11px; white-space: nowrap; }
+.heatmap-name { text-align: center; padding: 5px 14px; font-size: 11px; white-space: nowrap; }
 .heatmap-ticker { color: var(--text-dim); font-size: 10px; padding-right: 14px; white-space: nowrap; }
 
 /* Z-Score */
