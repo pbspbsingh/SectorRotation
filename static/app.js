@@ -68,9 +68,10 @@ function drillInto(sectorTicker) {
     return;
   }
   drillSector    = sectorTicker;
-  selectedTicker = null;
+  selectedTicker = sectorTicker;
   updateBreadcrumb();
   loadAll();
+  loadDetail(sectorTicker);
 }
 
 function drillBack() {

@@ -51,6 +51,8 @@ name   = "Comm. Services"
 # Format: [[industry_groups.<SECTOR_TICKER>]]
 # The section key must match a ticker defined in [[sectors]] above.
 
+# ── Technology ────────────────────────────────────────────────────────────────
+
 [[industry_groups.XLK]]
 ticker = "SOXX"
 name   = "Semiconductors"
@@ -62,6 +64,12 @@ name   = "Software"
 [[industry_groups.XLK]]
 ticker = "HACK"
 name   = "Cybersecurity"
+
+[[industry_groups.XLK]]
+ticker = "SKYY"
+name   = "Cloud Computing"
+
+# ── Financials ────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLF]]
 ticker = "KBE"
@@ -75,6 +83,12 @@ name   = "Regional Banks"
 ticker = "KIE"
 name   = "Insurance"
 
+[[industry_groups.XLF]]
+ticker = "IAI"
+name   = "Broker-Dealers & Exchanges"
+
+# ── Health Care ───────────────────────────────────────────────────────────────
+
 [[industry_groups.XLV]]
 ticker = "XBI"
 name   = "Biotech"
@@ -87,6 +101,12 @@ name   = "Pharma"
 ticker = "IHF"
 name   = "Health Care Providers"
 
+[[industry_groups.XLV]]
+ticker = "IHI"
+name   = "Medical Devices"
+
+# ── Cons. Discretionary ──────────────────────────────────────────────────────
+
 [[industry_groups.XLY]]
 ticker = "XRT"
 name   = "Retail"
@@ -94,6 +114,26 @@ name   = "Retail"
 [[industry_groups.XLY]]
 ticker = "XHB"
 name   = "Homebuilders"
+
+[[industry_groups.XLY]]
+ticker = "IBUY"
+name   = "Online Retail"
+
+[[industry_groups.XLY]]
+ticker = "PEJ"
+name   = "Leisure & Entertainment"
+
+# ── Cons. Staples ─────────────────────────────────────────────────────────────
+
+[[industry_groups.XLP]]
+ticker = "PBJ"
+name   = "Food & Beverage"
+
+[[industry_groups.XLP]]
+ticker = "XLG"
+name   = "Household & Personal Products"
+
+# ── Energy ────────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLE]]
 ticker = "XOP"
@@ -103,6 +143,16 @@ name   = "Oil & Gas E&P"
 ticker = "OIH"
 name   = "Oil Services"
 
+[[industry_groups.XLE]]
+ticker = "AMLP"
+name   = "MLPs / Midstream"
+
+[[industry_groups.XLE]]
+ticker = "FCG"
+name   = "Natural Gas"
+
+# ── Industrials ───────────────────────────────────────────────────────────────
+
 [[industry_groups.XLI]]
 ticker = "ITA"
 name   = "Aerospace & Defense"
@@ -111,21 +161,53 @@ name   = "Aerospace & Defense"
 ticker = "IYT"
 name   = "Transportation"
 
+[[industry_groups.XLI]]
+ticker = "PAVE"
+name   = "Infrastructure"
+
+[[industry_groups.XLI]]
+ticker = "XAR"
+name   = "Aerospace & Defense (Equal Wt)"
+
+# ── Materials ─────────────────────────────────────────────────────────────────
+
 [[industry_groups.XLB]]
 ticker = "XME"
 name   = "Metals & Mining"
+
+[[industry_groups.XLB]]
+ticker = "GDX"
+name   = "Gold Miners"
+
+[[industry_groups.XLB]]
+ticker = "LIT"
+name   = "Lithium & Battery Tech"
+
+# ── Real Estate ───────────────────────────────────────────────────────────────
 
 [[industry_groups.XLRE]]
 ticker = "VNQ"
 name   = "REITs"
 
+[[industry_groups.XLRE]]
+ticker = "MORT"
+name   = "Mortgage REITs"
+
+[[industry_groups.XLRE]]
+ticker = "ITB"
+name   = "Home Construction"
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+
 [[industry_groups.XLU]]
 ticker = "IDU"
 name   = "Electric Utilities"
 
-[[industry_groups.XLP]]
-ticker = "PBJ"
-name   = "Food & Beverage"
+[[industry_groups.XLU]]
+ticker = "ICLN"
+name   = "Clean Energy"
+
+# ── Comm. Services ───────────────────────────────────────────────────────────
 
 [[industry_groups.XLC]]
 ticker = "XTL"
@@ -134,3 +216,11 @@ name   = "Telecom"
 [[industry_groups.XLC]]
 ticker = "PBS"
 name   = "Media"
+
+[[industry_groups.XLC]]
+ticker = "SOCL"
+name   = "Social Media"
+
+[[industry_groups.XLC]]
+ticker = "NERD"
+name   = "Video Games & Esports"
