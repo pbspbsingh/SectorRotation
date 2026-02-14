@@ -69,6 +69,10 @@ name   = "Cybersecurity"
 ticker = "SKYY"
 name   = "Cloud Computing"
 
+[[industry_groups.XLK]]
+ticker = "FTXL"
+name   = "Semiconductor Equipment"
+
 # ── Financials ────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLF]]
@@ -86,6 +90,10 @@ name   = "Insurance"
 [[industry_groups.XLF]]
 ticker = "IAI"
 name   = "Broker-Dealers & Exchanges"
+
+[[industry_groups.XLF]]
+ticker = "FINX"
+name   = "Fintech"
 
 # ── Health Care ───────────────────────────────────────────────────────────────
 
@@ -116,7 +124,11 @@ ticker = "XHB"
 name   = "Homebuilders"
 
 [[industry_groups.XLY]]
-ticker = "IBUY"
+ticker = "ITB"
+name   = "Home Construction (Equal Wt)"
+
+[[industry_groups.XLY]]
+ticker = "ONLN"
 name   = "Online Retail"
 
 [[industry_groups.XLY]]
@@ -130,8 +142,8 @@ ticker = "PBJ"
 name   = "Food & Beverage"
 
 [[industry_groups.XLP]]
-ticker = "XLG"
-name   = "Household & Personal Products"
+ticker = "IYK"
+name   = "Consumer Staples (Broad)"
 
 # ── Energy ────────────────────────────────────────────────────────────────────
 
@@ -166,8 +178,8 @@ ticker = "PAVE"
 name   = "Infrastructure"
 
 [[industry_groups.XLI]]
-ticker = "XAR"
-name   = "Aerospace & Defense (Equal Wt)"
+ticker = "BOTZ"
+name   = "Robotics & Automation"
 
 # ── Materials ─────────────────────────────────────────────────────────────────
 
@@ -183,6 +195,10 @@ name   = "Gold Miners"
 ticker = "LIT"
 name   = "Lithium & Battery Tech"
 
+[[industry_groups.XLB]]
+ticker = "COPX"
+name   = "Copper Miners"
+
 # ── Real Estate ───────────────────────────────────────────────────────────────
 
 [[industry_groups.XLRE]]
@@ -194,8 +210,8 @@ ticker = "MORT"
 name   = "Mortgage REITs"
 
 [[industry_groups.XLRE]]
-ticker = "ITB"
-name   = "Home Construction"
+ticker = "SRVR"
+name   = "Data Center & Telecom REITs"
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -207,7 +223,7 @@ name   = "Electric Utilities"
 ticker = "ICLN"
 name   = "Clean Energy"
 
-# ── Comm. Services ───────────────────────────────────────────────────────────
+# ── Comm. Services ────────────────────────────────────────────────────────────
 
 [[industry_groups.XLC]]
 ticker = "XTL"
@@ -222,5 +238,5 @@ ticker = "SOCL"
 name   = "Social Media"
 
 [[industry_groups.XLC]]
-ticker = "NERD"
+ticker = "ESPO"
 name   = "Video Games & Esports"
