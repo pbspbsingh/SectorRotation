@@ -228,6 +228,10 @@ pub async fn fetch_incremental(
 /// If `since` is `Some(date)`, only data from that date onward is requested
 /// (using Yahoo's period1/period2 timestamp params).  Otherwise the full
 /// 2-year range is fetched.
+///
+/// Retries up to `MAX_RETRIES` times with exponential backoff on transient errors.
+const MAX_RETRIES: u32 = 2;
+
 async fn fetch_weekly(
     client: &Client,
     ticker: &str,
@@ -252,53 +256,85 @@ async fn fetch_weekly(
         ),
     };
 
-    let resp: YfResponse = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await?
-        .json()
-        .await?;
+    let mut last_err = anyhow!("fetch failed for {}", ticker);
 
-    if let Some(err) = resp.chart.error {
-        return Err(anyhow!("Yahoo Finance API error: {}", err));
+    for attempt in 0..=MAX_RETRIES {
+        if attempt > 0 {
+            let backoff = 2u64.pow(attempt) * 500;
+            warn!("{}: retry {}/{} in {}ms", ticker, attempt, MAX_RETRIES, backoff);
+            tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+        }
+
+        let response = match client
+            .get(&url)
+            .header("Accept", "application/json")
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = e.into();
+                continue;
+            }
+        };
+
+        // Retry on 429 (rate-limited) or 5xx server errors
+        let status = response.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+            last_err = anyhow!("{}: HTTP {}", ticker, status);
+            continue;
+        }
+
+        let resp: YfResponse = match response.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = e.into();
+                continue;
+            }
+        };
+
+        if let Some(err) = resp.chart.error {
+            return Err(anyhow!("Yahoo Finance API error for {}: {}", ticker, err));
+        }
+
+        let result = resp
+            .chart
+            .result
+            .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) })
+            .ok_or_else(|| anyhow!("No data returned for {}", ticker))?;
+
+        // Prefer adjclose, fall back to regular close
+        let closes = result
+            .indicators
+            .adjclose
+            .as_deref()
+            .and_then(|a| a.first())
+            .map(|a| &a.adjclose)
+            .or_else(|| result.indicators.quote.first().map(|q| &q.close))
+            .cloned()
+            .unwrap_or_default();
+
+        // Build daily (date, price) series — skip entries with missing prices
+        let daily: Vec<(NaiveDate, f64)> = result
+            .timestamp
+            .iter()
+            .zip(closes)
+            .filter_map(|(&ts, price)| {
+                let date = DateTime::from_timestamp(ts, 0)?.naive_local().date();
+                Some((date, price?))
+            })
+            .collect();
+
+        // Only keep days strictly after `since` — the cached date itself already exists
+        let filtered: Vec<(NaiveDate, f64)> = match since {
+            Some(cutoff) => daily.into_iter().filter(|(d, _)| *d > cutoff).collect(),
+            None => daily,
+        };
+
+        return Ok(resample_weekly(&filtered));
     }
 
-    let result = resp
-        .chart
-        .result
-        .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) })
-        .ok_or_else(|| anyhow!("No data returned for {}", ticker))?;
-
-    // Prefer adjclose, fall back to regular close
-    let closes = result
-        .indicators
-        .adjclose
-        .as_deref()
-        .and_then(|a| a.first())
-        .map(|a| &a.adjclose)
-        .or_else(|| result.indicators.quote.first().map(|q| &q.close))
-        .cloned()
-        .unwrap_or_default();
-
-    // Build daily (date, price) series — skip entries with missing prices
-    let daily: Vec<(NaiveDate, f64)> = result
-        .timestamp
-        .iter()
-        .zip(closes)
-        .filter_map(|(&ts, price)| {
-            let date = DateTime::from_timestamp(ts, 0)?.naive_local().date();
-            Some((date, price?))
-        })
-        .collect();
-
-    // Only keep days strictly after `since` — the cached date itself already exists
-    let filtered: Vec<(NaiveDate, f64)> = match since {
-        Some(cutoff) => daily.into_iter().filter(|(d, _)| *d > cutoff).collect(),
-        None => daily,
-    };
-
-    Ok(resample_weekly(&filtered))
+    Err(last_err)
 }
 
 /// From a sorted daily (date, price) series, produce a weekly series.

@@ -109,10 +109,16 @@ impl Config {
 
     /// Every ticker we need to fetch: benchmark + sectors + industry groups.
     pub fn all_tickers(&self) -> Vec<&str> {
-        let mut v = vec![self.benchmark.as_str()];
-        v.extend(self.sector_tickers());
-        v.extend(self.industry_tickers());
-        v.dedup();
+        let mut seen = std::collections::HashSet::new();
+        let mut v = Vec::new();
+        for t in std::iter::once(self.benchmark.as_str())
+            .chain(self.sector_tickers())
+            .chain(self.industry_tickers())
+        {
+            if seen.insert(t) {
+                v.push(t);
+            }
+        }
         v
     }
 

@@ -228,9 +228,9 @@ fn classify_quadrant(ratio: f64, momentum: f64) -> String {
 // METHOD 2: ROLLING RELATIVE STRENGTH RANKINGS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const WINDOW_SHORT: usize = 20; // ~1 month (trading days → weekly ≈ 4 weeks)
-const WINDOW_MED: usize = 63; // ~3 months (weekly ≈ 13 weeks)
-const WINDOW_LONG: usize = 126; // ~6 months (weekly ≈ 26 weeks)
+const WINDOW_SHORT: usize = 4;  // ~1 month  (4 weekly bars)
+const WINDOW_MED: usize = 13;   // ~3 months (13 weekly bars)
+const WINDOW_LONG: usize = 26;  // ~6 months (26 weekly bars)
 const RANK_CHANGE_LOOKBACK: usize = 4; // Compare rank vs 4 weeks ago
 
 pub fn compute_rankings(
@@ -345,8 +345,8 @@ pub fn compute_rankings(
 // METHOD 3: CROSS-SECTIONAL MOMENTUM Z-SCORE
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ZSCORE_SHORT: usize = 20; // ~1 month
-const ZSCORE_LONG: usize = 63; // ~3 months
+const ZSCORE_SHORT: usize = 4;  // ~1 month  (4 weekly bars)
+const ZSCORE_LONG: usize = 13;  // ~3 months (13 weekly bars)
 
 pub fn compute_zscores(
     prices: &WeeklyPrices,
