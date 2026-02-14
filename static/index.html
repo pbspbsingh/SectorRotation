@@ -1,102 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sector Rotation Monitor</title>
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sector Rotation Monitor</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 </head>
 
 <body>
 
-<header>
-  <div class="logo">ROTATION<span>MONITOR</span></div>
-  <div class="header-controls">
-    <span class="hc-label">LAYER</span>
-    <div class="layer-toggle">
-      <button id="btn-sector" class="active" onclick="setLayer('sector')">SECTORS</button>
-      <button id="btn-industry" onclick="setLayer('industry')">INDUSTRY GROUPS</button>
+  <header>
+    <div class="logo">ROTATION<span>MONITOR</span></div>
+    <div class="header-controls">
+      <span class="hc-label">LAYER</span>
+      <div class="layer-toggle">
+        <button id="btn-sector" class="active" onclick="setLayer('sector')">SECTORS</button>
+        <button id="btn-industry" onclick="setLayer('industry')">INDUSTRY GROUPS</button>
+      </div>
     </div>
-  </div>
-  <div class="header-right">
-    <div id="status-pill">
-      <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">No data loaded</span>
+    <div class="header-right">
+      <div id="status-pill">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">No data loaded</span>
+      </div>
+      <span class="hc-label">TIMEFRAME</span>
+      <div class="layer-toggle">
+        <button id="btn-daily" onclick="setTimeframe('daily')">DAILY</button>
+        <button id="btn-weekly" class="active" onclick="setTimeframe('weekly')">WEEKLY</button>
+      </div>
+      <button class="btn primary" id="refresh-btn" onclick="refreshData()">↻ REFRESH DATA</button>
     </div>
-    <span class="hc-label">TIMEFRAME</span>
-    <div class="layer-toggle">
-      <button id="btn-daily" onclick="setTimeframe('daily')">DAILY</button>
-      <button id="btn-weekly" class="active" onclick="setTimeframe('weekly')">WEEKLY</button>
-    </div>
-    <button class="btn primary" id="refresh-btn" onclick="refreshData()">↻ REFRESH DATA</button>
-  </div>
-</header>
+  </header>
 
-<div id="loading-overlay">
-  <div class="spinner"></div>
-  <span id="loading-msg">FETCHING MARKET DATA...</span>
-</div>
-
-<div class="main">
-
-  <!-- LEFT: HIERARCHY TREE -->
-  <div class="left-panel">
-    <div class="panel-header">Universe</div>
-    <div class="tree" id="tree"></div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <span id="loading-msg">FETCHING MARKET DATA...</span>
   </div>
 
-  <!-- CENTER: TABS -->
-  <div class="center-panel">
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('rrg')">RRG</div>
-      <div class="tab"        onclick="switchTab('heatmap')">RANK HEATMAP</div>
-      <div class="tab"        onclick="switchTab('zscore')">Z-SCORE</div>
+  <div class="main">
+
+    <!-- LEFT: HIERARCHY TREE -->
+    <div class="left-panel">
+      <div class="panel-header">Universe</div>
+      <div class="tree" id="tree"></div>
     </div>
 
-    <!-- BREADCRUMB (visible when drilled into a sector) -->
-    <div class="breadcrumb-bar" id="breadcrumb-bar">
-      <button class="breadcrumb-back" onclick="drillBack()">← BACK</button>
-      <span class="breadcrumb-root" onclick="drillBack()">ALL SECTORS</span>
-      <span class="breadcrumb-sep">›</span>
-      <span class="breadcrumb-current" id="breadcrumb-label"></span>
-      <span class="breadcrumb-count"   id="breadcrumb-count"></span>
-    </div>
+    <!-- CENTER: TABS -->
+    <div class="center-panel">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('rrg')">RRG</div>
+        <div class="tab" onclick="switchTab('heatmap')">RANK HEATMAP</div>
+        <div class="tab" onclick="switchTab('zscore')">Z-SCORE</div>
+      </div>
 
-    <div class="tab-content active" id="tab-rrg">
-      <div id="rrg-container"><svg id="rrg-svg"></svg></div>
-    </div>
+      <!-- BREADCRUMB (visible when drilled into a sector) -->
+      <div class="breadcrumb-bar" id="breadcrumb-bar">
+        <button class="breadcrumb-back" onclick="drillBack()">← BACK</button>
+        <span class="breadcrumb-root" onclick="drillBack()">ALL SECTORS</span>
+        <span class="breadcrumb-sep">›</span>
+        <span class="breadcrumb-current" id="breadcrumb-label"></span>
+        <span class="breadcrumb-count" id="breadcrumb-count"></span>
+      </div>
 
-    <div class="tab-content" id="tab-heatmap">
-      <div class="heatmap-scroll" id="heatmap-content">
-        <div class="empty-state">Load data to view heatmap</div>
+      <div class="tab-content active" id="tab-rrg">
+        <div id="rrg-container"><svg id="rrg-svg"></svg></div>
+      </div>
+
+      <div class="tab-content" id="tab-heatmap">
+        <div class="heatmap-scroll" id="heatmap-content">
+          <div class="empty-state">Load data to view heatmap</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-zscore">
+        <div class="zscore-scroll" id="zscore-content">
+          <div class="empty-state">Load data to view Z-scores</div>
+        </div>
       </div>
     </div>
 
-    <div class="tab-content" id="tab-zscore">
-      <div class="zscore-scroll" id="zscore-content">
-        <div class="empty-state">Load data to view Z-scores</div>
+    <!-- RIGHT: DETAIL PANEL -->
+    <div class="right-panel">
+      <div class="panel-header">Detail</div>
+      <div class="detail-scroll" id="detail-panel">
+        <div class="detail-placeholder">
+          <div style="font-size:24px;opacity:0.3">◎</div>
+          <div>Click any sector or industry group<br>to view signals</div>
+        </div>
       </div>
     </div>
+
   </div>
 
-  <!-- RIGHT: DETAIL PANEL -->
-  <div class="right-panel">
-    <div class="panel-header">Detail</div>
-    <div class="detail-scroll" id="detail-panel">
-      <div class="detail-placeholder">
-        <div style="font-size:24px;opacity:0.3">◎</div>
-        <div>Click any sector or industry group<br>to view signals</div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<script src="app.js"></script>
+  <script src="/app.js"></script>
 
 </body>
+
 </html>
