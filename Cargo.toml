@@ -1,10 +1,10 @@
 [package]
-name = "sector-rotation"
-version = "0.1.0"
+name = "sector_rotation"
+version = "1.0.0"
 edition = "2021"
 
 [[bin]]
-name = "sector-rotation"
+name = "sector_rotation"
 path = "src/main.rs"
 
 [dependencies]
@@ -16,8 +16,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.8", features = [] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
-reqwest = { version = "0.13", default-features = false, features = [
-    "rustls",
+reqwest = { version = "0.13", features = [
     "json",
     "cookies",
     "gzip",
@@ -37,3 +36,4 @@ chrono = { version = "0.4", features = ["serde"] }
 lto = true
 strip = true
 codegen-units = 1
+panic = "abort"
