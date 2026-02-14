@@ -231,33 +231,18 @@ function renderTree() {
   const container = document.getElementById('tree');
 
   if (currentLayer === 'sector') {
-    // ── Sector view: collapsible groups with industry children ──
+    // ── Sector view: flat list of sectors ──
     container.innerHTML = universe.map(sec => {
       const quad = quadrantForTicker(sec.ticker);
       const dot  = quad ? `<div class="quad-dot" style="background:${QUAD[quad]?.color||'#555'}"></div>` : '';
-      const hasChildren = sec.children.length > 0;
-      const arrow = hasChildren ? `<span class="tree-arrow ${expandedSectors.has(sec.ticker) ? 'open' : ''}">▶</span>` : '';
-      const children = sec.children.map(ind => {
-        const iq = quadrantForTicker(ind.ticker);
-        const idot = iq ? `<div class="quad-dot" style="background:${QUAD[iq]?.color||'#555'};width:5px;height:5px"></div>` : '';
-        return `
-          <div class="tree-industry ${selectedTicker === ind.ticker ? 'selected' : ''}"
-               onclick="selectTicker('${ind.ticker}')">
-            <span style="color:var(--text-dim);font-size:10px">${ind.ticker}</span>
-            <span style="flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ind.name}</span>
-            ${idot}
-          </div>`;
-      }).join('');
       return `
         <div class="tree-sector">
           <div class="tree-sector-header ${selectedTicker === sec.ticker ? 'selected' : ''}"
                onclick="toggleAndSelect('${sec.ticker}')">
-            ${arrow}
             <span class="tree-sector-ticker">${sec.ticker}</span>
             <span class="tree-sector-name">${sec.name}</span>
             ${dot}
           </div>
-          ${hasChildren ? `<div class="tree-children ${expandedSectors.has(sec.ticker) ? 'open' : ''}">${children}</div>` : ''}
         </div>`;
     }).join('');
 
@@ -296,7 +281,6 @@ function toggleSector(header) {
 }
 
 function toggleFilter(sectorTicker) {
-  // Toggle expand — collapse all others
   if (expandedSectors.has(sectorTicker)) {
     expandedSectors.delete(sectorTicker);
   } else {
@@ -309,7 +293,6 @@ function toggleFilter(sectorTicker) {
   } else {
     drillSector = sectorTicker;
   }
-  // Data is already at industry level — just re-render
   renderTree();
   renderRRG();
   renderHeatmap();
@@ -317,25 +300,15 @@ function toggleFilter(sectorTicker) {
 }
 
 function toggleAndSelect(ticker) {
-  // Toggle expand — collapse all others
-  if (expandedSectors.has(ticker)) {
-    expandedSectors.delete(ticker);
-  } else {
-    expandedSectors.clear();
-    expandedSectors.add(ticker);
-  }
   if (selectedTicker === ticker) {
-    // Unselect → back to all-sectors view
     selectedTicker = null;
-    drillSector = null;
+    renderTree();
     document.getElementById('detail-panel').innerHTML =
       '<div class="detail-placeholder"><div style="font-size:24px;opacity:0.3">◎</div><div>Click any sector or industry group<br>to view signals</div></div>';
-    loadAll();
   } else {
-    // Select → show this sector's industry groups on charts
     selectedTicker = ticker;
-    drillSector = ticker;
-    loadAll();
+    renderTree();
+    loadDetail(ticker);
   }
 }
 

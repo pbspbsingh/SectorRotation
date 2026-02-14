@@ -170,12 +170,4 @@ impl Config {
     pub fn is_sector(&self, ticker: &str) -> bool {
         self.sectors.iter().any(|(t, _)| t == ticker)
     }
-
-    /// Parent sector ticker for a given industry group ticker.
-    pub fn parent_sector(&self, industry_ticker: &str) -> Option<&str> {
-        self.industry_groups
-            .iter()
-            .find(|(_, groups)| groups.iter().any(|(t, _)| t == industry_ticker))
-            .map(|(sector, _)| sector.as_str())
-    }
 }
