@@ -1,0 +1,136 @@
+benchmark = "SPY"
+
+# ── Sectors ───────────────────────────────────────────────────────────────────
+# Format: [[sectors]]  ticker / name pairs, in display order.
+
+[[sectors]]
+ticker = "XLK"
+name   = "Technology"
+
+[[sectors]]
+ticker = "XLF"
+name   = "Financials"
+
+[[sectors]]
+ticker = "XLV"
+name   = "Health Care"
+
+[[sectors]]
+ticker = "XLY"
+name   = "Cons. Discretionary"
+
+[[sectors]]
+ticker = "XLP"
+name   = "Cons. Staples"
+
+[[sectors]]
+ticker = "XLE"
+name   = "Energy"
+
+[[sectors]]
+ticker = "XLI"
+name   = "Industrials"
+
+[[sectors]]
+ticker = "XLB"
+name   = "Materials"
+
+[[sectors]]
+ticker = "XLRE"
+name   = "Real Estate"
+
+[[sectors]]
+ticker = "XLU"
+name   = "Utilities"
+
+[[sectors]]
+ticker = "XLC"
+name   = "Comm. Services"
+
+# ── Industry Groups ───────────────────────────────────────────────────────────
+# Format: [[industry_groups.<SECTOR_TICKER>]]
+# The section key must match a ticker defined in [[sectors]] above.
+
+[[industry_groups.XLK]]
+ticker = "SOXX"
+name   = "Semiconductors"
+
+[[industry_groups.XLK]]
+ticker = "IGV"
+name   = "Software"
+
+[[industry_groups.XLK]]
+ticker = "HACK"
+name   = "Cybersecurity"
+
+[[industry_groups.XLF]]
+ticker = "KBE"
+name   = "Banks"
+
+[[industry_groups.XLF]]
+ticker = "KRE"
+name   = "Regional Banks"
+
+[[industry_groups.XLF]]
+ticker = "KIE"
+name   = "Insurance"
+
+[[industry_groups.XLV]]
+ticker = "XBI"
+name   = "Biotech"
+
+[[industry_groups.XLV]]
+ticker = "IHE"
+name   = "Pharma"
+
+[[industry_groups.XLV]]
+ticker = "IHF"
+name   = "Health Care Providers"
+
+[[industry_groups.XLY]]
+ticker = "XRT"
+name   = "Retail"
+
+[[industry_groups.XLY]]
+ticker = "XHB"
+name   = "Homebuilders"
+
+[[industry_groups.XLE]]
+ticker = "XOP"
+name   = "Oil & Gas E&P"
+
+[[industry_groups.XLE]]
+ticker = "OIH"
+name   = "Oil Services"
+
+[[industry_groups.XLI]]
+ticker = "ITA"
+name   = "Aerospace & Defense"
+
+[[industry_groups.XLI]]
+ticker = "IYT"
+name   = "Transportation"
+
+[[industry_groups.XLB]]
+ticker = "XME"
+name   = "Metals & Mining"
+
+[[industry_groups.XLRE]]
+ticker = "VNQ"
+name   = "REITs"
+
+[[industry_groups.XLU]]
+ticker = "IDU"
+name   = "Electric Utilities"
+
+[[industry_groups.XLP]]
+ticker = "PBJ"
+name   = "Food & Beverage"
+
+[[industry_groups.XLC]]
+ticker = "XTL"
+name   = "Telecom"
+
+[[industry_groups.XLC]]
+ticker = "PBS"
+name   = "Media"
