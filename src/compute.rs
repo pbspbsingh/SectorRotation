@@ -4,6 +4,51 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TIMEFRAME PARAMETERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Window parameters that depend on the bar frequency (daily vs weekly).
+#[derive(Debug, Clone, Copy)]
+pub struct Timeframe {
+    pub ema_short: usize,
+    pub ema_long: usize,
+    pub mom_lookback: usize,
+    pub tail_len: usize,
+    pub win_short: usize,
+    pub win_med: usize,
+    pub win_long: usize,
+    pub rank_change_lookback: usize,
+    pub z_short: usize,
+    pub z_long: usize,
+}
+
+pub const DAILY: Timeframe = Timeframe {
+    ema_short: 10,
+    ema_long: 40,
+    mom_lookback: 20,
+    tail_len: 25,
+    win_short: 20,
+    win_med: 63,
+    win_long: 126,
+    rank_change_lookback: 20,
+    z_short: 20,
+    z_long: 63,
+};
+
+pub const WEEKLY: Timeframe = Timeframe {
+    ema_short: 10,
+    ema_long: 40,
+    mom_lookback: 4,
+    tail_len: 5,
+    win_short: 4,
+    win_med: 13,
+    win_long: 26,
+    rank_change_lookback: 4,
+    z_short: 4,
+    z_long: 13,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SHARED OUTPUT TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -20,7 +65,7 @@ pub struct RrgEntry {
     pub ticker: String,
     pub name: String,
     pub current: RrgPoint,
-    /// Last N weeks of (rs_ratio, rs_momentum) — oldest first
+    /// Last N periods of (rs_ratio, rs_momentum) — oldest first
     pub tail: Vec<RrgPoint>,
     pub quadrant: String,
 }
@@ -36,7 +81,7 @@ pub struct RankEntry {
     pub rank_20d: usize,
     pub rank_63d: usize,
     pub rank_126d: usize,
-    /// Rank 4 weeks ago for 20d window (positive = improved)
+    /// Rank change over lookback window (positive = improved)
     pub rank_change: i32,
     /// Signal: "rising", "falling", "stable"
     pub trend: String,
@@ -69,8 +114,6 @@ pub struct ConvergenceEntry {
 // MATH UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Exponential Moving Average (EMA)
-/// span: number of periods, equivalent to 2/(span+1) smoothing factor
 fn ema(values: &[f64], span: usize) -> Vec<f64> {
     if values.is_empty() {
         return vec![];
@@ -84,8 +127,6 @@ fn ema(values: &[f64], span: usize) -> Vec<f64> {
     result
 }
 
-
-/// Cross-sectional Z-score: (x - mean) / std across a slice of values
 fn zscore_vec(values: &[f64]) -> Vec<f64> {
     if values.len() < 2 {
         return vec![0.0; values.len()];
@@ -99,7 +140,6 @@ fn zscore_vec(values: &[f64]) -> Vec<f64> {
     values.iter().map(|v| (v - mean) / std).collect()
 }
 
-/// Rank a slice of (index, value) pairs — rank 1 = highest value
 fn rank_descending(values: &[f64]) -> Vec<usize> {
     let mut indexed: Vec<(usize, f64)> = values.iter().cloned().enumerate().collect();
     indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -118,16 +158,11 @@ fn round2(v: f64) -> f64 {
 // METHOD 1: RELATIVE ROTATION GRAPH (RRG)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// EMA span parameters for JdK RS-Ratio (approximation)
-const EMA_SHORT_SPAN: usize = 10; // ~10 weeks short
-const EMA_LONG_SPAN: usize = 40; // ~40 weeks long
-const MOM_LOOKBACK: usize = 4; // de Kempenaer standard: 4-week RoC
-const TAIL_WEEKS: usize = 5; // standard 5-week tail
-
 pub fn compute_rrg(
     prices: &WeeklyPrices,
     benchmark: &str,
-    tickers: &[(&str, &str)], // (ticker, name)
+    tickers: &[(&str, &str)],
+    tf: &Timeframe,
 ) -> Vec<RrgEntry> {
     let bench_series = match prices.get(benchmark) {
         Some(s) => s,
@@ -142,38 +177,32 @@ pub fn compute_rrg(
             None => continue,
         };
 
-        // Align on same dates
         let (aligned_sector, aligned_bench) = align(sector_series, bench_series);
-        if aligned_sector.len() < EMA_LONG_SPAN + MOM_LOOKBACK + TAIL_WEEKS + 5 {
-            continue; // Not enough data
+        if aligned_sector.len() < tf.ema_long + tf.mom_lookback + tf.tail_len + 5 {
+            continue;
         }
 
         let sec_prices = prices_only(&aligned_sector);
         let bch_prices = prices_only(&aligned_bench);
 
-        // Step 1: Relative Strength ratio
         let rs: Vec<f64> = sec_prices
             .iter()
             .zip(bch_prices.iter())
             .map(|(s, b)| s / b)
             .collect();
 
-        // Step 2: Two EMAs of RS
-        let ema_short = ema(&rs, EMA_SHORT_SPAN);
-        let ema_long = ema(&rs, EMA_LONG_SPAN);
+        let ema_short = ema(&rs, tf.ema_short);
+        let ema_long = ema(&rs, tf.ema_long);
 
-        // Step 3: RS-Ratio = 100 + (EMA_short - EMA_long) / EMA_long * 100
         let rs_ratio: Vec<f64> = ema_short
             .iter()
             .zip(ema_long.iter())
             .map(|(s, l)| 100.0 + (s - l) / l * 100.0)
             .collect();
 
-        // Step 4: RS-Momentum = 100 + RoC(RS-Ratio, 4 weeks)
-        // Only compute where we have MOM_LOOKBACK lookback
-        let rs_momentum: Vec<f64> = (MOM_LOOKBACK..rs_ratio.len())
+        let rs_momentum: Vec<f64> = (tf.mom_lookback..rs_ratio.len())
             .map(|i| {
-                let past = rs_ratio[i - MOM_LOOKBACK];
+                let past = rs_ratio[i - tf.mom_lookback];
                 if past.abs() < 1e-10 {
                     100.0
                 } else {
@@ -182,11 +211,9 @@ pub fn compute_rrg(
             })
             .collect();
 
-        // Align rs_ratio to same length as rs_momentum
-        let ratio_aligned = &rs_ratio[MOM_LOOKBACK..];
+        let ratio_aligned = &rs_ratio[tf.mom_lookback..];
 
-        // Step 5: Extract tail (last TAIL_WEEKS points)
-        let tail_len = TAIL_WEEKS.min(rs_momentum.len());
+        let tail_len = tf.tail_len.min(rs_momentum.len());
         let tail: Vec<RrgPoint> = ratio_aligned[ratio_aligned.len() - tail_len..]
             .iter()
             .zip(rs_momentum[rs_momentum.len() - tail_len..].iter())
@@ -228,15 +255,11 @@ fn classify_quadrant(ratio: f64, momentum: f64) -> String {
 // METHOD 2: ROLLING RELATIVE STRENGTH RANKINGS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const WINDOW_SHORT: usize = 4;  // ~1 month  (4 weekly bars)
-const WINDOW_MED: usize = 13;   // ~3 months (13 weekly bars)
-const WINDOW_LONG: usize = 26;  // ~6 months (26 weekly bars)
-const RANK_CHANGE_LOOKBACK: usize = 4; // Compare rank vs 4 weeks ago
-
 pub fn compute_rankings(
     prices: &WeeklyPrices,
     benchmark: &str,
     tickers: &[(&str, &str)],
+    tf: &Timeframe,
 ) -> Vec<RankEntry> {
     let bench_series = match prices.get(benchmark) {
         Some(s) => s,
@@ -245,14 +268,12 @@ pub fn compute_rankings(
 
     let _bench_prices = prices_only(bench_series);
 
-    // Compute relative returns for each ticker across 3 windows
     struct TempEntry {
         ticker: String,
         name: String,
         rel_20: f64,
         rel_63: f64,
         rel_126: f64,
-        // For rank change: relative return 4 weeks ago
         rel_20_past: f64,
     }
 
@@ -265,7 +286,7 @@ pub fn compute_rankings(
         };
 
         let (aligned_sec, aligned_bench) = align(series, bench_series);
-        if aligned_sec.len() < WINDOW_LONG + RANK_CHANGE_LOOKBACK + 5 {
+        if aligned_sec.len() < tf.win_long + tf.rank_change_lookback + 5 {
             continue;
         }
 
@@ -287,10 +308,10 @@ pub fn compute_rankings(
         temps.push(TempEntry {
             ticker: ticker.to_string(),
             name: name.to_string(),
-            rel_20: rel_ret(WINDOW_SHORT, 0),
-            rel_63: rel_ret(WINDOW_MED, 0),
-            rel_126: rel_ret(WINDOW_LONG, 0),
-            rel_20_past: rel_ret(WINDOW_SHORT, RANK_CHANGE_LOOKBACK),
+            rel_20: rel_ret(tf.win_short, 0),
+            rel_63: rel_ret(tf.win_med, 0),
+            rel_126: rel_ret(tf.win_long, 0),
+            rel_20_past: rel_ret(tf.win_short, tf.rank_change_lookback),
         });
     }
 
@@ -298,7 +319,6 @@ pub fn compute_rankings(
         return vec![];
     }
 
-    // Rank current relative returns (1 = best)
     let rels_20: Vec<f64> = temps.iter().map(|t| t.rel_20).collect();
     let rels_63: Vec<f64> = temps.iter().map(|t| t.rel_63).collect();
     let rels_126: Vec<f64> = temps.iter().map(|t| t.rel_126).collect();
@@ -315,7 +335,7 @@ pub fn compute_rankings(
         .map(|(i, t)| {
             let rank_now = ranks_20[i] as i32;
             let rank_past = ranks_20_past[i] as i32;
-            let rank_change = rank_past - rank_now; // positive = improved (rank number went down)
+            let rank_change = rank_past - rank_now;
 
             let trend = if rank_change >= 3 {
                 "rising".to_string()
@@ -345,13 +365,11 @@ pub fn compute_rankings(
 // METHOD 3: CROSS-SECTIONAL MOMENTUM Z-SCORE
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ZSCORE_SHORT: usize = 4;  // ~1 month  (4 weekly bars)
-const ZSCORE_LONG: usize = 13;  // ~3 months (13 weekly bars)
-
 pub fn compute_zscores(
     prices: &WeeklyPrices,
     benchmark: &str,
     tickers: &[(&str, &str)],
+    tf: &Timeframe,
 ) -> Vec<ZScoreEntry> {
     let bench_series = match prices.get(benchmark) {
         Some(s) => s,
@@ -374,7 +392,7 @@ pub fn compute_zscores(
         };
 
         let (aligned_sec, aligned_bench) = align(series, bench_series);
-        if aligned_sec.len() < ZSCORE_LONG + 5 {
+        if aligned_sec.len() < tf.z_long + 5 {
             continue;
         }
 
@@ -392,8 +410,8 @@ pub fn compute_zscores(
         temps.push(Temp {
             ticker: ticker.to_string(),
             name: name.to_string(),
-            rel_short: rel_ret(ZSCORE_SHORT),
-            rel_long: rel_ret(ZSCORE_LONG),
+            rel_short: rel_ret(tf.z_short),
+            rel_long: rel_ret(tf.z_long),
         });
     }
 
@@ -401,7 +419,6 @@ pub fn compute_zscores(
         return vec![];
     }
 
-    // Cross-sectional z-scores
     let rels_short: Vec<f64> = temps.iter().map(|t| t.rel_short).collect();
     let rels_long: Vec<f64> = temps.iter().map(|t| t.rel_long).collect();
 
@@ -415,15 +432,14 @@ pub fn compute_zscores(
             let zs = round2(z_shorts[i]);
             let zl = round2(z_longs[i]);
 
-            // Signal classification
             let signal = if zs > 1.5 && zl > 0.5 {
-                "leader" // Strong across both windows
+                "leader"
             } else if zs > 0.5 && zl < 0.0 {
-                "improving" // Short-term improving, long-term still weak — early rotation
+                "improving"
             } else if zs < -1.5 && zl < -0.5 {
-                "lagging" // Weak across both
+                "lagging"
             } else if zs > 0.0 && zl < -1.5 {
-                "reverting" // Recovering from deep lows — mean reversion / early entry
+                "reverting"
             } else {
                 "neutral"
             };
@@ -448,7 +464,6 @@ pub fn compute_convergence(
     rankings: &[RankEntry],
     zscores: &[ZScoreEntry],
 ) -> Vec<ConvergenceEntry> {
-    // Index by ticker for quick lookup
     let rank_map: HashMap<&str, &RankEntry> =
         rankings.iter().map(|r| (r.ticker.as_str(), r)).collect();
     let z_map: HashMap<&str, &ZScoreEntry> =
@@ -459,16 +474,13 @@ pub fn compute_convergence(
             let rank = rank_map.get(r.ticker.as_str())?;
             let z = z_map.get(r.ticker.as_str())?;
 
-            // RRG signal: in Improving or Leading quadrant, and tail moving right (ratio increasing)
             let rrg_signal = matches!(r.quadrant.as_str(), "Improving" | "Leading")
                 && r.tail.len() >= 2
                 && r.tail.last().unwrap().rs_ratio
                     > r.tail[r.tail.len().saturating_sub(2)].rs_ratio;
 
-            // Rank signal: short-term rank improving
             let rank_signal = rank.rank_change >= 2;
 
-            // Z-score signal: either leader or recovering from lows
             let zscore_signal = matches!(z.signal.as_str(), "leader" | "improving" | "reverting");
 
             let score = [rrg_signal, rank_signal, zscore_signal]

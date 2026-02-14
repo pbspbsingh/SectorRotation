@@ -27,6 +27,11 @@
       <div class="status-dot" id="status-dot"></div>
       <span id="status-text">No data loaded</span>
     </div>
+    <span class="hc-label">TIMEFRAME</span>
+    <div class="layer-toggle">
+      <button id="btn-daily" onclick="setTimeframe('daily')">DAILY</button>
+      <button id="btn-weekly" class="active" onclick="setTimeframe('weekly')">WEEKLY</button>
+    </div>
     <button class="btn primary" id="refresh-btn" onclick="refreshData()">↻ REFRESH DATA</button>
   </div>
 </header>

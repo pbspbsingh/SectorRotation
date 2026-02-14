@@ -73,6 +73,25 @@ impl PriceDb {
             .connect(&url)
             .await?;
 
+        // Performance pragmas: WAL mode for concurrent reads during writes,
+        // normal synchronous for durability without excessive fsyncs,
+        // 8MB cache, and memory-mapped I/O.
+        sqlx::query("PRAGMA journal_mode = WAL")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA synchronous = NORMAL")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA cache_size = -8000")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA mmap_size = 67108864")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA temp_store = MEMORY")
+            .execute(&pool)
+            .await?;
+
         sqlx::migrate!().run(&pool).await?;
 
         Ok(Self { pool })
@@ -331,7 +350,7 @@ async fn fetch_weekly(
             None => daily,
         };
 
-        return Ok(resample_weekly(&filtered));
+        return Ok(filtered);
     }
 
     Err(last_err)
@@ -339,7 +358,7 @@ async fn fetch_weekly(
 
 /// From a sorted daily (date, price) series, produce a weekly series.
 /// Keeps the last available trading day in each ISO week (typically Friday).
-fn resample_weekly(daily: &[(NaiveDate, f64)]) -> PriceSeries {
+pub fn resample_weekly(daily: &[(NaiveDate, f64)]) -> PriceSeries {
     let mut by_week: BTreeMap<(i32, u32), (NaiveDate, f64)> = BTreeMap::new();
 
     for &(date, price) in daily {
@@ -356,6 +375,14 @@ fn resample_weekly(daily: &[(NaiveDate, f64)]) -> PriceSeries {
     }
 
     by_week.into_values().collect()
+}
+
+/// Resample an entire price map from daily to weekly.
+pub fn resample_all(daily: &WeeklyPrices) -> WeeklyPrices {
+    daily
+        .iter()
+        .map(|(ticker, series)| (ticker.clone(), resample_weekly(series)))
+        .collect()
 }
 
 // ─── Merge helper ────────────────────────────────────────────────────────────

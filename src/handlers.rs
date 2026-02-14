@@ -11,10 +11,10 @@ use tokio::sync::RwLock;
 use crate::{
     compute::{
         compute_convergence, compute_rankings, compute_rrg, compute_zscores, ConvergenceEntry,
-        RankEntry, RrgEntry, ZScoreEntry,
+        RankEntry, RrgEntry, Timeframe, ZScoreEntry, DAILY, WEEKLY,
     },
     config::Config,
-    data::{align, fetch_incremental, merge_prices, PriceDb, WeeklyPrices},
+    data::{align, fetch_incremental, merge_prices, resample_all, PriceDb, WeeklyPrices},
 };
 
 // ─── Application State ────────────────────────────────────────────────────────
@@ -34,6 +34,30 @@ pub type SharedState = Arc<RwLock<AppState>>;
 pub struct LayerQuery {
     /// "sector" (default) or "industry"
     layer: Option<String>,
+    /// "daily" (default) or "weekly"
+    timeframe: Option<String>,
+}
+
+impl LayerQuery {
+    fn resolve_timeframe(&self) -> &'static Timeframe {
+        match self.timeframe.as_deref() {
+            Some("weekly") => &WEEKLY,
+            _ => &DAILY,
+        }
+    }
+
+    fn is_weekly(&self) -> bool {
+        self.timeframe.as_deref() == Some("weekly")
+    }
+}
+
+/// Prepare prices for the requested timeframe — daily as-is, weekly via resample.
+fn prices_for_timeframe(daily: &WeeklyPrices, query: &LayerQuery) -> WeeklyPrices {
+    if query.is_weekly() {
+        resample_all(daily)
+    } else {
+        daily.clone()
+    }
 }
 
 // ─── Response envelope ───────────────────────────────────────────────────────
@@ -98,8 +122,10 @@ pub async fn get_rrg(
         return Err(no_data());
     }
 
+    let prices = prices_for_timeframe(&state.prices, &query);
     let tickers = resolve_pairs(&state.config, &query);
-    let entries = compute_rrg(&state.prices, &state.config.benchmark, &tickers);
+    let tf = query.resolve_timeframe();
+    let entries = compute_rrg(&prices, &state.config.benchmark, &tickers, tf);
     Ok(ApiResponse::ok(entries, state.last_updated))
 }
 
@@ -114,8 +140,10 @@ pub async fn get_rankings(
         return Err(no_data());
     }
 
+    let prices = prices_for_timeframe(&state.prices, &query);
     let tickers = resolve_pairs(&state.config, &query);
-    let mut entries = compute_rankings(&state.prices, &state.config.benchmark, &tickers);
+    let tf = query.resolve_timeframe();
+    let mut entries = compute_rankings(&prices, &state.config.benchmark, &tickers, tf);
     entries.sort_by_key(|e| e.rank_20d);
     Ok(ApiResponse::ok(entries, state.last_updated))
 }
@@ -131,8 +159,10 @@ pub async fn get_zscores(
         return Err(no_data());
     }
 
+    let prices = prices_for_timeframe(&state.prices, &query);
     let tickers = resolve_pairs(&state.config, &query);
-    let mut entries = compute_zscores(&state.prices, &state.config.benchmark, &tickers);
+    let tf = query.resolve_timeframe();
+    let mut entries = compute_zscores(&prices, &state.config.benchmark, &tickers, tf);
     entries.sort_by(|a, b| {
         b.z_short
             .partial_cmp(&a.z_short)
@@ -152,10 +182,12 @@ pub async fn get_convergence(
         return Err(no_data());
     }
 
+    let prices = prices_for_timeframe(&state.prices, &query);
     let tickers = resolve_pairs(&state.config, &query);
-    let rrg = compute_rrg(&state.prices, &state.config.benchmark, &tickers);
-    let rankings = compute_rankings(&state.prices, &state.config.benchmark, &tickers);
-    let zscores = compute_zscores(&state.prices, &state.config.benchmark, &tickers);
+    let tf = query.resolve_timeframe();
+    let rrg = compute_rrg(&prices, &state.config.benchmark, &tickers, tf);
+    let rankings = compute_rankings(&prices, &state.config.benchmark, &tickers, tf);
+    let zscores = compute_zscores(&prices, &state.config.benchmark, &tickers, tf);
     let mut entries = compute_convergence(&rrg, &rankings, &zscores);
     entries.sort_by_key(|e| match e.confidence.as_str() {
         "high" => 0,
@@ -186,14 +218,40 @@ pub struct PricePoint {
     ratio: f64,
 }
 
+#[derive(Deserialize)]
+pub struct DetailQuery {
+    timeframe: Option<String>,
+}
+
+impl DetailQuery {
+    fn resolve_timeframe(&self) -> &'static Timeframe {
+        match self.timeframe.as_deref() {
+            Some("weekly") => &WEEKLY,
+            _ => &DAILY,
+        }
+    }
+
+    fn is_weekly(&self) -> bool {
+        self.timeframe.as_deref() == Some("weekly")
+    }
+}
+
 pub async fn get_detail(
     State(state): State<SharedState>,
     Path(ticker): Path<String>,
+    Query(query): Query<DetailQuery>,
 ) -> Result<Json<ApiResponse<DetailResponse>>, ApiError> {
     let state = state.read().await;
     if state.prices.is_empty() {
         return Err(no_data());
     }
+
+    let prices = if query.is_weekly() {
+        resample_all(&state.prices)
+    } else {
+        state.prices.clone()
+    };
+    let tf = query.resolve_timeframe();
 
     let cfg = &state.config;
     let name = cfg.name_of(&ticker).unwrap_or(ticker.as_str()).to_string();
@@ -205,12 +263,12 @@ pub async fn get_detail(
         cfg.industry_pairs()
     };
 
-    let rrg_all = compute_rrg(&state.prices, &cfg.benchmark, &tickers);
-    let rank_all = compute_rankings(&state.prices, &cfg.benchmark, &tickers);
-    let z_all = compute_zscores(&state.prices, &cfg.benchmark, &tickers);
+    let rrg_all = compute_rrg(&prices, &cfg.benchmark, &tickers, tf);
+    let rank_all = compute_rankings(&prices, &cfg.benchmark, &tickers, tf);
+    let z_all = compute_zscores(&prices, &cfg.benchmark, &tickers, tf);
     let conv_all = compute_convergence(&rrg_all, &rank_all, &z_all);
 
-    let price_history = build_price_history(&state.prices, &ticker, &cfg.benchmark);
+    let price_history = build_price_history(&prices, &ticker, &cfg.benchmark);
 
     Ok(ApiResponse::ok(
         DetailResponse {

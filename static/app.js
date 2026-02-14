@@ -3,10 +3,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API = ''; // empty = same origin
-let currentLayer   = 'sector';
-let currentTab     = 'rrg';
-let selectedTicker = null;
-let drillSector    = null; // when set, center shows only this sector's industry groups
+let currentLayer     = 'sector';
+let currentTab       = 'rrg';
+let currentTimeframe = 'weekly';
+let selectedTicker   = null;
+let drillSector      = null; // when set, center shows only this sector's industry groups
+let expandedSectors  = new Set(); // tracks which sectors are expanded in the tree
 
 let universe = [];
 let rrgData   = [];
@@ -141,11 +143,12 @@ async function refreshData() {
 async function loadAll() {
   const layer = effectiveLayer();
   try {
+    const tfParam = '&timeframe=' + currentTimeframe;
     const [univ, rrg, rank, z] = await Promise.all([
       apiFetch('/universe'),
-      apiFetch('/rrg?layer='      + layer),
-      apiFetch('/rankings?layer=' + layer),
-      apiFetch('/zscore?layer='   + layer),
+      apiFetch('/rrg?layer='      + layer + tfParam),
+      apiFetch('/rankings?layer=' + layer + tfParam),
+      apiFetch('/zscore?layer='   + layer + tfParam),
     ]);
     if (univ.ok) universe = univ.data.sectors;
     if (rrg.ok)  rrgData  = rrg.data;
@@ -167,7 +170,7 @@ async function loadAll() {
 async function loadDetail(ticker) {
   selectedTicker = ticker;
   try {
-    const resp = await apiFetch('/detail/' + ticker);
+    const resp = await apiFetch('/detail/' + ticker + '?timeframe=' + currentTimeframe);
     if (resp.ok) renderDetail(resp.data);
   } catch (e) {
     console.error('loadDetail failed:', e);
@@ -180,10 +183,17 @@ async function loadDetail(ticker) {
 
 function setLayer(layer) {
   currentLayer = layer;
-  drillSector  = null; // reset drilldown when manually switching layers
+  drillSector  = null;
   document.getElementById('btn-sector').classList.toggle('active', layer === 'sector');
   document.getElementById('btn-industry').classList.toggle('active', layer === 'industry');
   updateBreadcrumb();
+  if (rrgData.length > 0 || rankData.length > 0) loadAll();
+}
+
+function setTimeframe(tf) {
+  currentTimeframe = tf;
+  document.getElementById('btn-daily').classList.toggle('active', tf === 'daily');
+  document.getElementById('btn-weekly').classList.toggle('active', tf === 'weekly');
   if (rrgData.length > 0 || rankData.length > 0) loadAll();
 }
 
@@ -220,69 +230,42 @@ function quadrantForTicker(ticker) {
 function renderTree() {
   const container = document.getElementById('tree');
 
-  if (drillSector) {
-    // ── Drilled in: show parent sector header (clickable back) + children expanded ──
-    const sec = universe.find(s => s.ticker === drillSector);
-    if (!sec) return;
-
-    const secQuad = quadrantForTicker(sec.ticker);
-    const secDot  = secQuad
-      ? `<div class="quad-dot" style="background:${QUAD[secQuad]?.color || '#555'}"></div>`
-      : '';
-
-    const children = sec.children.map(ind => {
-      const quad = quadrantForTicker(ind.ticker);
-      const dot  = quad
-        ? `<div class="quad-dot" style="background:${QUAD[quad]?.color||'#555'};width:5px;height:5px"></div>`
-        : '';
-      return `
-        <div class="tree-industry ${selectedTicker === ind.ticker ? 'selected' : ''}"
-             onclick="selectTicker('${ind.ticker}')">
-          <span style="color:var(--text-dim);font-size:10px">${ind.ticker}</span>
-          <span style="flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ind.name}</span>
-          ${dot}
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `
-      <div class="tree-sector">
-        <div class="tree-sector-header" style="opacity:0.6;cursor:pointer"
-             onclick="drillBack()" title="Back to all sectors">
-          <span style="color:var(--text-dim);font-size:9px;margin-right:4px">‹</span>
-          <span class="tree-sector-ticker">${sec.ticker}</span>
-          <span class="tree-sector-name">${sec.name}</span>
-          ${secDot}
-        </div>
-        <div class="tree-children open">${children}</div>
-      </div>`;
-
-  } else if (currentLayer === 'sector') {
-    // ── Sector view: clicking a sector drills in (if it has children) ──
+  if (currentLayer === 'sector') {
+    // ── Sector view: collapsible groups with industry children ──
     container.innerHTML = universe.map(sec => {
-      const quad        = quadrantForTicker(sec.ticker);
-      const dot         = quad ? `<div class="quad-dot" style="background:${QUAD[quad]?.color||'#555'}"></div>` : '';
+      const quad = quadrantForTicker(sec.ticker);
+      const dot  = quad ? `<div class="quad-dot" style="background:${QUAD[quad]?.color||'#555'}"></div>` : '';
       const hasChildren = sec.children.length > 0;
-      const hint        = hasChildren ? `<span style="color:var(--text-muted);font-size:10px;margin-left:2px">›</span>` : '';
-      const onclick     = hasChildren
-        ? `drillInto('${sec.ticker}')`
-        : `selectTicker('${sec.ticker}')`;
-      const title = hasChildren ? 'Click to view industry groups' : '';
+      const arrow = hasChildren ? `<span class="tree-arrow ${expandedSectors.has(sec.ticker) ? 'open' : ''}">▶</span>` : '';
+      const children = sec.children.map(ind => {
+        const iq = quadrantForTicker(ind.ticker);
+        const idot = iq ? `<div class="quad-dot" style="background:${QUAD[iq]?.color||'#555'};width:5px;height:5px"></div>` : '';
+        return `
+          <div class="tree-industry ${selectedTicker === ind.ticker ? 'selected' : ''}"
+               onclick="selectTicker('${ind.ticker}')">
+            <span style="color:var(--text-dim);font-size:10px">${ind.ticker}</span>
+            <span style="flex:1;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ind.name}</span>
+            ${idot}
+          </div>`;
+      }).join('');
       return `
         <div class="tree-sector">
           <div class="tree-sector-header ${selectedTicker === sec.ticker ? 'selected' : ''}"
-               onclick="${onclick}" title="${title}">
+               onclick="toggleAndSelect('${sec.ticker}')">
+            ${arrow}
             <span class="tree-sector-ticker">${sec.ticker}</span>
             <span class="tree-sector-name">${sec.name}</span>
-            ${hint}
             ${dot}
           </div>
+          ${hasChildren ? `<div class="tree-children ${expandedSectors.has(sec.ticker) ? 'open' : ''}">${children}</div>` : ''}
         </div>`;
     }).join('');
 
   } else {
-    // ── Industry layer view (no drill): sectors as collapsible groups ──
+    // ── Industry layer view: sectors as collapsible groups with filtering ──
     container.innerHTML = universe.map(sec => {
       if (sec.children.length === 0) return '';
+      const isFiltered = drillSector === sec.ticker;
       const children = sec.children.map(ind => {
         const quad = quadrantForTicker(ind.ticker);
         const dot  = quad ? `<div class="quad-dot" style="background:${QUAD[quad]?.color||'#555'};width:5px;height:5px"></div>` : '';
@@ -296,11 +279,12 @@ function renderTree() {
       }).join('');
       return `
         <div class="tree-sector">
-          <div class="tree-sector-header" onclick="toggleSector(this)">
-            <span class="tree-arrow">▶</span>
-            <span class="tree-sector-name" style="font-size:10px;color:var(--text-dim)">${sec.name}</span>
+          <div class="tree-sector-header ${isFiltered ? 'selected' : ''}" onclick="toggleFilter('${sec.ticker}')">
+            <span class="tree-arrow ${expandedSectors.has(sec.ticker) ? 'open' : ''}">▶</span>
+            <span class="tree-sector-ticker">${sec.ticker}</span>
+            <span class="tree-sector-name">${sec.name}</span>
           </div>
-          <div class="tree-children">${children}</div>
+          <div class="tree-children ${expandedSectors.has(sec.ticker) ? 'open' : ''}">${children}</div>
         </div>`;
     }).join('');
   }
@@ -311,11 +295,62 @@ function toggleSector(header) {
   header.nextElementSibling.classList.toggle('open');
 }
 
+function toggleFilter(sectorTicker) {
+  // Toggle expand — collapse all others
+  if (expandedSectors.has(sectorTicker)) {
+    expandedSectors.delete(sectorTicker);
+  } else {
+    expandedSectors.clear();
+    expandedSectors.add(sectorTicker);
+  }
+  // Toggle chart filter
+  if (drillSector === sectorTicker) {
+    drillSector = null;
+  } else {
+    drillSector = sectorTicker;
+  }
+  // Data is already at industry level — just re-render
+  renderTree();
+  renderRRG();
+  renderHeatmap();
+  renderZScore();
+}
+
+function toggleAndSelect(ticker) {
+  // Toggle expand — collapse all others
+  if (expandedSectors.has(ticker)) {
+    expandedSectors.delete(ticker);
+  } else {
+    expandedSectors.clear();
+    expandedSectors.add(ticker);
+  }
+  if (selectedTicker === ticker) {
+    // Unselect → back to all-sectors view
+    selectedTicker = null;
+    drillSector = null;
+    document.getElementById('detail-panel').innerHTML =
+      '<div class="detail-placeholder"><div style="font-size:24px;opacity:0.3">◎</div><div>Click any sector or industry group<br>to view signals</div></div>';
+    loadAll();
+  } else {
+    // Select → show this sector's industry groups on charts
+    selectedTicker = ticker;
+    drillSector = ticker;
+    loadAll();
+  }
+}
+
 // Unified ticker selection — used by both sector and industry clicks (#14)
 function selectTicker(ticker) {
-  selectedTicker = ticker;
-  renderTree();
-  loadDetail(ticker);
+  if (selectedTicker === ticker) {
+    selectedTicker = null;
+    renderTree();
+    document.getElementById('detail-panel').innerHTML =
+      '<div class="detail-placeholder"><div style="font-size:24px;opacity:0.3">◎</div><div>Click any sector or industry group<br>to view signals</div></div>';
+  } else {
+    selectedTicker = ticker;
+    renderTree();
+    loadDetail(ticker);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -391,9 +426,7 @@ function renderRRG() {
    .attr('text-anchor','middle').attr('fill','#4A6070').attr('font-family','IBM Plex Mono').attr('font-size','10')
    .attr('letter-spacing','0.08em').text('RS-MOMENTUM  →  acceleration');
 
-  // Dots drilldown in sector view; open detail when already drilled or in industry layer
-  const isDrillable = !drillSector && currentLayer === 'sector';
-
+  // Clicking any dot selects that ticker for the detail panel
   data.forEach(entry => {
     const color = tickerColor(entry.ticker);
     const tail  = entry.tail;
@@ -411,15 +444,7 @@ function renderRRG() {
     const ex = xScale(entry.current.rsRatio);
     const ey = yScale(entry.current.rsMomentum);
 
-    const onClick = isDrillable
-      ? () => drillInto(entry.ticker)
-      : () => { selectTicker(entry.ticker); };
-
-    // Subtle glow ring on drillable dots to hint interactivity
-    if (isDrillable) {
-      g.append('circle').attr('cx',ex).attr('cy',ey).attr('r',10)
-       .attr('fill','none').attr('stroke',color).attr('stroke-width',0.5).attr('opacity',0.25);
-    }
+    const onClick = () => { selectTicker(entry.ticker); };
 
     g.append('circle').attr('cx',ex).attr('cy',ey).attr('r',5)
      .attr('fill',color).attr('stroke','#0D1117').attr('stroke-width',1.5)
@@ -435,14 +460,6 @@ function renderRRG() {
      .attr('fill',color).attr('font-size',10).attr('font-family','IBM Plex Mono').attr('font-weight',600)
      .style('cursor','pointer').on('click', onClick).text(entry.ticker);
   });
-
-  // Drilldown hint text
-  if (isDrillable && data.length > 0) {
-    svg.append('text').attr('x', W - 10).attr('y', H - 8)
-       .attr('text-anchor','end').attr('fill','#2A3A4A')
-       .attr('font-family','IBM Plex Mono').attr('font-size',9)
-       .text('click a sector dot to drill into its industry groups');
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
