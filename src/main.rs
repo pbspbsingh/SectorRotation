@@ -4,6 +4,9 @@ mod config;
 mod data;
 mod handlers;
 
+#[cfg(not(debug_assertions))]
+mod static_assets;
+
 use axum::{
     routing::{get, post},
     Router,
@@ -13,8 +16,6 @@ use data::PriceDb;
 use handlers::{AppState, SharedState};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 use tracing::info;
 
 const DB_PATH: &str = "cache.db";
@@ -76,11 +77,6 @@ async fn main() {
         db,
     }));
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
     let api_router = Router::new()
         .route("/status", get(handlers::get_status))
         .route("/universe", get(handlers::get_universe))
@@ -92,18 +88,31 @@ async fn main() {
         .route("/refresh", post(handlers::post_refresh))
         .with_state(state.clone());
 
-    let app = Router::new()
-        .nest("/api", api_router)
-        .fallback_service(ServeDir::new("static"))
-        .layer(cors);
+    let app: Router<_> = Router::new().nest("/api", api_router);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+    #[cfg(debug_assertions)]
+    let app = {
+        info!("Running in DEBUG mode: Serving files from /static folder");
+        app.fallback_service(tower_http::services::ServeDir::new("static"))
+    };
+    #[cfg(not(debug_assertions))]
+    let app = {
+        info!("Running in RELEASE mode: Serving files from binary memory");
+        app.fallback(static_assets::static_handler)
+    };
+
+    let port = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3000);
+    let socket = format!("0.0.0.0:{port}");
+    let listener = tokio::net::TcpListener::bind(&socket)
         .await
         .expect("Failed to bind port 3000");
 
     info!("╔══════════════════════════════════════════╗");
     info!("║   Sector Rotation Dashboard              ║");
-    info!("║   http://localhost:3000                  ║");
+    info!("║   http://{socket}/                   ║");
     info!("╚══════════════════════════════════════════╝");
     info!("Tip: POST /api/refresh to load market data.");
 

@@ -355,7 +355,7 @@ pub async fn get_universe(State(state): State<SharedState>) -> Json<ApiResponse<
             }
         })
         .collect();
-    
+
     let benchmark = cfg.benchmark.clone();
     ApiResponse::ok(UniverseResponse { benchmark, sectors }, None)
 }
