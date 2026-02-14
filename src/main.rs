@@ -9,12 +9,15 @@ use axum::{
     Router,
 };
 use config::Config;
+use data::PriceDb;
 use handlers::{AppState, SharedState};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing::info;
+
+const DB_PATH: &str = "cache.db";
 
 #[tokio::main]
 async fn main() {
@@ -39,11 +42,38 @@ async fn main() {
         config.benchmark
     );
 
+    // Open (or create) SQLite cache
+    let db = PriceDb::open(DB_PATH).await.unwrap_or_else(|e| {
+        eprintln!("ERROR opening cache DB: {e}");
+        std::process::exit(1);
+    });
+
+    // Try to restore prices from cache
+    let (prices, last_updated) = match db.load_prices().await {
+        Ok(Some((prices, ts))) => {
+            info!(
+                "Loaded {} cached tickers (last updated {})",
+                prices.len(),
+                ts
+            );
+            (prices, Some(ts))
+        }
+        Ok(None) => {
+            info!("No cached data found — start with POST /api/refresh");
+            (Default::default(), None)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to read cache: {} — starting empty", e);
+            (Default::default(), None)
+        }
+    };
+
     // Shared state — config lives here for the lifetime of the server
     let state: SharedState = Arc::new(RwLock::new(AppState {
         config,
-        prices: Default::default(),
-        last_updated: None,
+        prices,
+        last_updated,
+        db,
     }));
 
     let cors = CorsLayer::new()

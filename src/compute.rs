@@ -1,5 +1,5 @@
 /// compute.rs — RRG, RS Rankings, and Z-Score computation
-use crate::data::{align, prices_only, PriceSeries, WeeklyPrices};
+use crate::data::{align, prices_only, WeeklyPrices};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -84,15 +84,6 @@ fn ema(values: &[f64], span: usize) -> Vec<f64> {
     result
 }
 
-/// Percentage return over N periods: (current - past) / past * 100
-fn pct_change_n(values: &[f64], n: usize) -> Vec<f64> {
-    if values.len() <= n {
-        return vec![];
-    }
-    (n..values.len())
-        .map(|i| (values[i] - values[i - n]) / values[i - n] * 100.0)
-        .collect()
-}
 
 /// Cross-sectional Z-score: (x - mean) / std across a slice of values
 fn zscore_vec(values: &[f64]) -> Vec<f64> {
@@ -252,7 +243,7 @@ pub fn compute_rankings(
         None => return vec![],
     };
 
-    let bench_prices = prices_only(bench_series);
+    let _bench_prices = prices_only(bench_series);
 
     // Compute relative returns for each ticker across 3 windows
     struct TempEntry {

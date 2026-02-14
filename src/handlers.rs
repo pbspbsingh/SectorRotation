@@ -14,7 +14,7 @@ use crate::{
         RankEntry, RrgEntry, ZScoreEntry,
     },
     config::Config,
-    data::{align, fetch_all_weekly, WeeklyPrices},
+    data::{align, fetch_incremental, merge_prices, PriceDb, WeeklyPrices},
 };
 
 // ─── Application State ────────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ pub struct AppState {
     pub config: Config,
     pub prices: WeeklyPrices,
     pub last_updated: Option<chrono::DateTime<chrono::Utc>>,
+    pub db: PriceDb,
 }
 
 pub type SharedState = Arc<RwLock<AppState>>;
@@ -79,8 +80,6 @@ fn no_data() -> ApiError {
 // ─── Layer resolution ─────────────────────────────────────────────────────────
 
 /// Returns the ticker/name pairs for the requested layer, borrowing from Config.
-/// We collect into an owned Vec<(String,String)> so callers can build
-/// Vec<(&str,&str)> with a local borrow.
 fn resolve_pairs<'a>(config: &'a Config, layer: &LayerQuery) -> Vec<(&'a str, &'a str)> {
     match layer.layer.as_deref().unwrap_or("sector") {
         "industry" => config.industry_pairs(),
@@ -228,13 +227,9 @@ pub async fn get_detail(
 }
 
 fn build_price_history(prices: &WeeklyPrices, ticker: &str, benchmark: &str) -> Vec<PricePoint> {
-    let sec_series = match prices.get(ticker) {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let bch_series = match prices.get(benchmark) {
-        Some(s) => s,
-        None => return vec![],
+    let (sec_series, bch_series) = match (prices.get(ticker), prices.get(benchmark)) {
+        (Some(s), Some(b)) => (s, b),
+        _ => return vec![],
     };
 
     let (aligned_sec, aligned_bch) = align(sec_series, bch_series);
@@ -337,8 +332,7 @@ pub struct RefreshResponse {
 pub async fn post_refresh(
     State(state): State<SharedState>,
 ) -> Result<Json<ApiResponse<RefreshResponse>>, ApiError> {
-    // Read the ticker list from config without holding the write lock during the fetch
-    let (tickers_owned, benchmark) = {
+    let (tickers_owned, db) = {
         let state = state.read().await;
         let tickers_owned: Vec<String> = state
             .config
@@ -346,32 +340,47 @@ pub async fn post_refresh(
             .into_iter()
             .map(str::to_string)
             .collect();
-        (tickers_owned, state.config.benchmark.clone())
+        (tickers_owned, state.db.clone())
     };
 
     let ticker_refs: Vec<&str> = tickers_owned.iter().map(String::as_str).collect();
-    tracing::info!("Starting data refresh for {} tickers...", ticker_refs.len());
 
-    let new_prices = fetch_all_weekly(&ticker_refs).await;
+    // Query the cache for the latest date per ticker
+    let cached_dates = db.latest_dates().await.unwrap_or_default();
+    tracing::info!(
+        "Starting incremental refresh for {} tickers ({} already cached)...",
+        ticker_refs.len(),
+        cached_dates.len()
+    );
+
+    let new_prices = fetch_incremental(&ticker_refs, &cached_dates).await;
     let fetched = new_prices.len();
 
     let failed: Vec<String> = ticker_refs
         .iter()
-        .filter(|t| !new_prices.contains_key(**t))
+        .filter(|t| !new_prices.contains_key(**t) && !cached_dates.contains_key(**t))
         .map(|t| t.to_string())
         .collect();
 
     let now = chrono::Utc::now();
+
+    // Persist new rows to SQLite (upsert — no deletion)
+    if !new_prices.is_empty() {
+        if let Err(e) = db.upsert_prices(&new_prices, now).await {
+            tracing::error!("Failed to upsert prices to cache: {}", e);
+        }
+    }
+
     {
         let mut state = state.write().await;
-        state.prices = new_prices;
+        merge_prices(&mut state.prices, new_prices);
         state.last_updated = Some(now);
     }
 
     tracing::info!(
-        "Refresh complete: {}/{} tickers loaded",
+        "Refresh complete: {} tickers updated, {} failed",
         fetched,
-        ticker_refs.len()
+        failed.len()
     );
 
     Ok(ApiResponse::ok(
