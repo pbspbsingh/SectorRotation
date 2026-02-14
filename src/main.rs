@@ -88,13 +88,13 @@ async fn main() {
         .route("/rankings", get(handlers::get_rankings))
         .route("/zscore", get(handlers::get_zscores))
         .route("/convergence", get(handlers::get_convergence))
-        .route("/detail/:ticker", get(handlers::get_detail))
+        .route("/detail/{ticker}", get(handlers::get_detail))
         .route("/refresh", post(handlers::post_refresh))
         .with_state(state.clone());
 
     let app = Router::new()
         .nest("/api", api_router)
-        .nest_service("/", ServeDir::new("static"))
+        .fallback_service(ServeDir::new("static"))
         .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")

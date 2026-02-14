@@ -6,11 +6,14 @@
 /// merged with existing rows, and persisted back.
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use serde::Deserialize;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
 use tracing::{info, warn};
 
 // ─── Yahoo Finance v8 API response structures ────────────────────────────────
@@ -99,11 +102,9 @@ impl PriceDb {
 
     /// Return the latest cached date for each ticker that has data.
     pub async fn latest_dates(&self) -> Result<HashMap<String, NaiveDate>> {
-        let rows = sqlx::query!(
-            "SELECT ticker, MAX(date) as max_date FROM prices GROUP BY ticker"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query!("SELECT ticker, MAX(date) as max_date FROM prices GROUP BY ticker")
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut map = HashMap::new();
         for row in rows {
@@ -155,22 +156,18 @@ impl PriceDb {
 
     /// Load all cached prices. Returns `None` if the cache is empty.
     pub async fn load_prices(&self) -> Result<Option<(WeeklyPrices, DateTime<Utc>)>> {
-        let row = sqlx::query_scalar!(
-            "SELECT value FROM metadata WHERE key = 'last_updated'"
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query_scalar!("SELECT value FROM metadata WHERE key = 'last_updated'")
+            .fetch_optional(&self.pool)
+            .await?;
 
         let last_updated = match row {
             Some(s) => s.parse::<DateTime<Utc>>()?,
             None => return Ok(None),
         };
 
-        let rows = sqlx::query!(
-            "SELECT ticker, date, close FROM prices ORDER BY ticker, date"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query!("SELECT ticker, date, close FROM prices ORDER BY ticker, date")
+            .fetch_all(&self.pool)
+            .await?;
 
         if rows.is_empty() {
             return Ok(None);
@@ -203,40 +200,43 @@ pub async fn fetch_incremental(
 ) -> WeeklyPrices {
     let client = Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-        .timeout(std::time::Duration::from_secs(30))
+        .cookie_store(true)
+        .gzip(true)
+        .deflate(true)
+        .timeout(Duration::from_secs(15))
         .build()
         .expect("Failed to build HTTP client");
 
     let today = Utc::now().date_naive();
     let mut results = WeeklyPrices::new();
 
-    for ticker in tickers {
-        if let Some(&latest) = cached_dates.get(*ticker) {
+    for &ticker in tickers {
+        if let Some(&latest) = cached_dates.get(ticker) {
             if latest >= today {
-                info!("{} already up-to-date (cached through {}), skipping", ticker, latest);
+                info!("{ticker} already up-to-date (cached through {latest}), skipping");
                 continue;
             }
         }
 
-        let since = cached_dates.get(*ticker).copied();
+        let since = cached_dates.get(ticker).copied();
         match fetch_weekly(&client, ticker, since).await {
             Ok(series) => {
                 info!(
                     "Fetched {} new data points for {} (since {:?})",
                     series.len(),
                     ticker,
-                    since
+                    since,
                 );
                 if !series.is_empty() {
                     results.insert(ticker.to_string(), series);
                 }
             }
             Err(e) => {
-                warn!("Failed to fetch {}: {}", ticker, e);
+                warn!("Failed to fetch {ticker}: {e}");
             }
         }
         let delay = rand::rng().random_range(100..=300);
-        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        tokio::time::sleep(Duration::from_millis(delay)).await;
     }
 
     results
@@ -249,7 +249,8 @@ pub async fn fetch_incremental(
 /// 2-year range is fetched.
 ///
 /// Retries up to `MAX_RETRIES` times with exponential backoff on transient errors.
-const MAX_RETRIES: u32 = 2;
+const MAX_RETRIES: u32 = 3;
+const YAHOO_CHARTS_URL: &str = "https://query1.finance.yahoo.com/v8/finance/chart";
 
 async fn fetch_weekly(
     client: &Client,
@@ -258,21 +259,11 @@ async fn fetch_weekly(
 ) -> Result<PriceSeries> {
     let url = match since {
         Some(date) => {
-            let period1 = date
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()
-                .timestamp();
+            let period1 = date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
             let period2 = Utc::now().timestamp();
-            format!(
-                "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&period1={}&period2={}",
-                ticker, period1, period2
-            )
+            format!("{YAHOO_CHARTS_URL}/{ticker}?interval=1d&period1={period1}&period2={period2}")
         }
-        None => format!(
-            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=2y",
-            ticker
-        ),
+        None => format!("{YAHOO_CHARTS_URL}/{ticker}?interval=1d&range=2y"),
     };
 
     let mut last_err = anyhow!("fetch failed for {}", ticker);
@@ -280,8 +271,8 @@ async fn fetch_weekly(
     for attempt in 0..=MAX_RETRIES {
         if attempt > 0 {
             let backoff = 2u64.pow(attempt) * 500;
-            warn!("{}: retry {}/{} in {}ms", ticker, attempt, MAX_RETRIES, backoff);
-            tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+            warn!("{ticker}: retry {attempt}/{MAX_RETRIES} in {backoff}ms");
+            tokio::time::sleep(Duration::from_millis(backoff)).await;
         }
 
         let response = match client
@@ -319,7 +310,13 @@ async fn fetch_weekly(
         let result = resp
             .chart
             .result
-            .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) })
+            .and_then(|mut v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.remove(0))
+                }
+            })
             .ok_or_else(|| anyhow!("No data returned for {}", ticker))?;
 
         // Prefer adjclose, fall back to regular close
