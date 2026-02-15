@@ -9,10 +9,9 @@ use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use rand::RngExt;
 use reqwest::Client;
 use serde::Deserialize;
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use sqlx::{Pool, Sqlite, sqlite::{SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous}};
 use std::{
-    collections::{BTreeMap, HashMap},
-    time::Duration,
+    collections::{BTreeMap, HashMap}, str::FromStr, time::Duration
 };
 use tracing::{info, warn};
 
@@ -70,29 +69,17 @@ pub struct PriceDb {
 impl PriceDb {
     /// Open (or create) the SQLite database at `db_path` and run embedded migrations.
     pub async fn open(db_path: &str) -> Result<Self> {
-        let url = format!("sqlite:{}?mode=rwc", db_path);
+        let options = SqliteConnectOptions::from_str(&format!("sqlite:{db_path}?mode=rwc"))?
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal)
+            .auto_vacuum(SqliteAutoVacuum::Incremental)
+            .pragma("cache_size", "-8000")
+            .pragma("mmap_size", "67108864")
+            .pragma("temp_store", "MEMORY");
+
         let pool = SqlitePoolOptions::new()
             .max_connections(4)
-            .connect(&url)
-            .await?;
-
-        // Performance pragmas: WAL mode for concurrent reads during writes,
-        // normal synchronous for durability without excessive fsyncs,
-        // 8MB cache, and memory-mapped I/O.
-        sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA synchronous = NORMAL")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA cache_size = -8000")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA mmap_size = 67108864")
-            .execute(&pool)
-            .await?;
-        sqlx::query("PRAGMA temp_store = MEMORY")
-            .execute(&pool)
+            .connect_with(options)
             .await?;
 
         sqlx::migrate!().run(&pool).await?;
