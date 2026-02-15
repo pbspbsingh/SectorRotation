@@ -177,15 +177,23 @@ async function loadDetail(ticker) {
   if (detailAbortController) { detailAbortController.abort(); }
   detailAbortController = new AbortController();
   try {
-    const resp = await apiFetch(
-      '/detail/' + ticker + '?timeframe=' + currentTimeframe,
-      detailAbortController.signal
-    );
+    const resp = await apiFetch(`/detail/${ticker}?timeframe=${currentTimeframe}`, detailAbortController.signal);
     if (resp.ok) renderDetail(resp.data);
   } catch (e) {
     if (e.name === 'AbortError') return; // stale request — ignore
     console.error('loadDetail failed:', e);
-    setDetailError(ticker);
+  }
+}
+
+async function loadTvMapping() {
+  try {
+    const r = await fetch('/api/tv_mapping');
+    if (!r.ok) throw new Error('not found');
+    const table = await r.text();
+    document.getElementById('mapping-content').innerHTML = table;
+  } catch (e) {
+    document.getElementById('mapping-content').innerHTML =
+      '<div class="empty-state">Could not load TradingView Sectors/Industires Mapping</div>';
   }
 }
 
@@ -196,10 +204,33 @@ async function loadDetail(ticker) {
 function setLayer(layer) {
   currentLayer = layer;
   drillSector = null;
+  updateBreadcrumb();
+
+  // Update toggle button states
   document.getElementById('btn-sector').classList.toggle('active', layer === 'sector');
   document.getElementById('btn-industry').classList.toggle('active', layer === 'industry');
-  updateBreadcrumb();
-  if (rrgData.length > 0 || rankData.length > 0) loadAll();
+  document.getElementById('btn-mapping').classList.toggle('active', layer === 'mapping');
+
+  const isMapping = layer === 'mapping';
+
+  // Show/hide tabs bar and breadcrumb
+  document.querySelector('.tabs').style.display = isMapping ? 'none' : '';
+  document.getElementById('breadcrumb-bar').style.display = isMapping ? 'none' : '';
+
+  // Show mapping panel OR restore the active tab content
+  document.getElementById('tab-mapping').classList.toggle('active', isMapping);
+  if (isMapping) {
+    // Deactivate all regular tab contents
+    ['tab-rrg', 'tab-heatmap', 'tab-zscore'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+    loadTvMapping();
+  } else {
+    document.getElementById('tab-mapping').classList.remove('active');
+    // Restore whichever tab was active before
+    switchTab(currentTab);
+    loadAll();
+  }
 }
 
 function setTimeframe(tf) {
@@ -638,6 +669,16 @@ function renderDetail(data) {
       </div>`;
   }
 
+  function tvForTicker(ticker) {
+    const sec = universe.find(s => s.ticker === ticker);
+    if (sec) return { sectors: sec.tvSectors || [] };
+    for (const s of universe) {
+      const ind = (s.children || []).find(c => c.ticker === ticker);
+      if (ind) return { industries: ind.tvIndustries || [] };
+    }
+    return null;
+  }
+
   function miniChart(history) {
     if (!history || history.length < 2) return '';
     const ratios = history.map(p => p.ratio);
@@ -724,6 +765,31 @@ function renderDetail(data) {
       ${confBar(convergence.confidence)}
     </div>`;
 
+  // TradingView Mapping
+  const tv = tvForTicker(data.ticker);
+  if (tv && (tv.sectors.length > 0 || tv.industries.length > 0)) {
+    const hasSectors = tv.sectors && tv.sectors.length > 0;
+    const hasIndustries = tv.industries && tv.industries.length > 0;
+    html += `
+      <div class="detail-card">
+        <div class="detail-card-title">TradingView Mapping</div>
+        ${hasSectors ? `
+          <div class="kv" style="margin-bottom:8px">
+            <div class="kv-key">SECTOR${tv.sectors.length > 1 ? 'S' : ''}</div>
+            <div class="tv-tags">
+              ${tv.sectors.map(s => `<span class="tv-tag tv-tag-sector">${s}</span>`).join('')}
+            </div>
+          </div>` : ''}
+        ${hasIndustries ? `
+          <div class="kv">
+            <div class="kv-key">INDUSTR${tv.industries.length > 1 ? 'IES' : 'Y'}</div>
+            <div class="tv-tags">
+              ${tv.industries.map(i => `<span class="tv-tag tv-tag-industry">${i}</span>`).join('')}
+            </div>
+          </div>` : ''}
+      </div>`;
+  }
+
   html += miniChart(priceHistory);
   panel.innerHTML = html;
 }
@@ -742,10 +808,10 @@ async function init() {
     } else {
       setStatus('No data — click Refresh', false);
       const univ = await apiFetch('/universe');
-      if (univ.ok) { 
+      if (univ.ok) {
         benchmark = univ.data.benchmark;
-        universe = univ.data.sectors; 
-        renderTree(); 
+        universe = univ.data.sectors;
+        renderTree();
       }
     }
   } catch (e) {

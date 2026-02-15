@@ -18,6 +18,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use crate::handlers::tv_mapping;
+
 const DB_PATH: &str = "cache.db";
 
 #[tokio::main]
@@ -79,6 +81,7 @@ async fn main() {
 
     let api_router = Router::new()
         .route("/status", get(handlers::get_status))
+        .route("/tv_mapping", get(tv_mapping))
         .route("/universe", get(handlers::get_universe))
         .route("/rrg", get(handlers::get_rrg))
         .route("/rankings", get(handlers::get_rankings))

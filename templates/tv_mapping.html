@@ -1,0 +1,41 @@
+<h1>TradingView Sectors/Industries Mapping</h1>
+<hr>
+<h2>Sectors ETF → TradingView Sector</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>ETF</th>
+            <th>TradingView Sector</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for (name, ticker, map) in sectors %}
+            <tr>
+                <td>{{name}}</td>
+                <td>{{ticker}}</td>
+                <td>{{map}}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<hr>
+<h2>Industry Group ETFs → TradingView Industries</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>ETF</th>
+            <th>TradingView Industries</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for (name, ticker, map) in industries %}
+            <tr>
+                <td>{{name}}</td>
+                <td>{{ticker}}</td>
+                <td>{{map}}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>

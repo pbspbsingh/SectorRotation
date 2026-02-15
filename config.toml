@@ -1,242 +1,292 @@
 benchmark = "SPY"
 
 # ── Sectors ───────────────────────────────────────────────────────────────────
-# Format: [[sectors]]  ticker / name pairs, in display order.
 
 [[sectors]]
-ticker = "XLK"
-name   = "Technology"
+ticker     = "XLK"
+name       = "Technology"
+tv_sectors = ["Electronic Technology", "Technology Services"]
 
 [[sectors]]
-ticker = "XLF"
-name   = "Financials"
+ticker     = "XLF"
+name       = "Financials"
+tv_sectors = ["Finance"]
 
 [[sectors]]
-ticker = "XLV"
-name   = "Health Care"
+ticker     = "XLV"
+name       = "Health Care"
+tv_sectors = ["Health Technology", "Health Services"]
 
 [[sectors]]
-ticker = "XLY"
-name   = "Cons. Discretionary"
+ticker     = "XLY"
+name       = "Cons. Discretionary"
+tv_sectors = ["Consumer Durables", "Consumer Services", "Retail Trade"]
 
 [[sectors]]
-ticker = "XLP"
-name   = "Cons. Staples"
+ticker     = "XLP"
+name       = "Cons. Staples"
+tv_sectors = ["Consumer Non-Durables"]
 
 [[sectors]]
-ticker = "XLE"
-name   = "Energy"
+ticker     = "XLE"
+name       = "Energy"
+tv_sectors = ["Energy Minerals"]
 
 [[sectors]]
-ticker = "XLI"
-name   = "Industrials"
+ticker     = "XLI"
+name       = "Industrials"
+tv_sectors = ["Producer Manufacturing", "Industrial Services", "Transportation"]
 
 [[sectors]]
-ticker = "XLB"
-name   = "Materials"
+ticker     = "XLB"
+name       = "Materials"
+tv_sectors = ["Non-Energy Minerals", "Process Industries"]
 
 [[sectors]]
-ticker = "XLRE"
-name   = "Real Estate"
+ticker     = "XLRE"
+name       = "Real Estate"
+tv_sectors = ["Finance"]
 
 [[sectors]]
-ticker = "XLU"
-name   = "Utilities"
+ticker     = "XLU"
+name       = "Utilities"
+tv_sectors = ["Utilities"]
 
 [[sectors]]
-ticker = "XLC"
-name   = "Comm. Services"
+ticker     = "XLC"
+name       = "Comm. Services"
+tv_sectors = ["Technology Services", "Communications", "Consumer Services"]
 
 # ── Industry Groups ───────────────────────────────────────────────────────────
-# Format: [[industry_groups.<SECTOR_TICKER>]]
-# The section key must match a ticker defined in [[sectors]] above.
 
 # ── Technology ────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLK]]
-ticker = "SOXX"
-name   = "Semiconductors"
+ticker       = "SOXX"
+name         = "Semiconductors"
+tv_industries = ["Semiconductors"]
 
 [[industry_groups.XLK]]
-ticker = "IGV"
-name   = "Software"
+ticker       = "IGV"
+name         = "Software"
+tv_industries = ["Packaged Software"]
 
 [[industry_groups.XLK]]
-ticker = "HACK"
-name   = "Cybersecurity"
+ticker       = "HACK"
+name         = "Cybersecurity"
+tv_industries = ["Packaged Software", "Internet Software/Services"]
 
 [[industry_groups.XLK]]
-ticker = "SKYY"
-name   = "Cloud Computing"
+ticker       = "SKYY"
+name         = "Cloud Computing"
+tv_industries = ["Internet Software/Services", "Packaged Software"]
 
 [[industry_groups.XLK]]
-ticker = "FTXL"
-name   = "Semiconductor Equipment"
+ticker       = "FTXL"
+name         = "Semiconductor Equipment"
+tv_industries = ["Semiconductors"]
 
 # ── Financials ────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLF]]
-ticker = "KBE"
-name   = "Banks"
+ticker       = "KBE"
+name         = "Banks"
+tv_industries = ["Major Banks", "Regional Banks"]
 
 [[industry_groups.XLF]]
-ticker = "KRE"
-name   = "Regional Banks"
+ticker       = "KRE"
+name         = "Regional Banks"
+tv_industries = ["Regional Banks"]
 
 [[industry_groups.XLF]]
-ticker = "KIE"
-name   = "Insurance"
+ticker       = "KIE"
+name         = "Insurance"
+tv_industries = ["Property/Casualty Insurance", "Multi-Line Insurance", "Insurance Brokers/Services"]
 
 [[industry_groups.XLF]]
-ticker = "IAI"
-name   = "Broker-Dealers & Exchanges"
+ticker       = "IAI"
+name         = "Broker-Dealers & Exchanges"
+tv_industries = ["Investment Banks/Brokers", "Financial Publishing/Services"]
 
 [[industry_groups.XLF]]
-ticker = "FINX"
-name   = "Fintech"
+ticker       = "FINX"
+name         = "Fintech"
+tv_industries = ["Investment Banks/Brokers", "Data Processing Services", "Finance/Rental/Leasing"]
 
 # ── Health Care ───────────────────────────────────────────────────────────────
 
 [[industry_groups.XLV]]
-ticker = "XBI"
-name   = "Biotech"
+ticker       = "XBI"
+name         = "Biotech"
+tv_industries = ["Biotechnology"]
 
 [[industry_groups.XLV]]
-ticker = "IHE"
-name   = "Pharma"
+ticker       = "IHE"
+name         = "Pharma"
+tv_industries = ["Pharmaceuticals: Major"]
 
 [[industry_groups.XLV]]
-ticker = "IHF"
-name   = "Health Care Providers"
+ticker       = "IHF"
+name         = "Health Care Providers"
+tv_industries = ["Managed Health Care"]
 
 [[industry_groups.XLV]]
-ticker = "IHI"
-name   = "Medical Devices"
+ticker       = "IHI"
+name         = "Medical Devices"
+tv_industries = ["Medical Specialties"]
 
 # ── Cons. Discretionary ──────────────────────────────────────────────────────
 
 [[industry_groups.XLY]]
-ticker = "XRT"
-name   = "Retail"
+ticker       = "XRT"
+name         = "Retail"
+tv_industries = ["Specialty Stores", "Apparel/Footwear Retail", "Home Improvement Chains"]
 
 [[industry_groups.XLY]]
-ticker = "XHB"
-name   = "Homebuilders"
+ticker       = "XHB"
+name         = "Homebuilders"
+tv_industries = ["Home Improvement Chains", "Trucks/Construction/Farm Machinery"]
 
 [[industry_groups.XLY]]
-ticker = "ITB"
-name   = "Home Construction (Equal Wt)"
+ticker       = "ITB"
+name         = "Home Construction (Equal Wt)"
+tv_industries = ["Home Improvement Chains"]
 
 [[industry_groups.XLY]]
-ticker = "ONLN"
-name   = "Online Retail"
+ticker       = "ONLN"
+name         = "Online Retail"
+tv_industries = ["Internet Retail"]
 
 [[industry_groups.XLY]]
-ticker = "PEJ"
-name   = "Leisure & Entertainment"
+ticker       = "PEJ"
+name         = "Leisure & Entertainment"
+tv_industries = ["Restaurants", "Hotels/Resorts/Cruise Lines", "Movies/Entertainment", "Other Consumer Services"]
 
 # ── Cons. Staples ─────────────────────────────────────────────────────────────
 
 [[industry_groups.XLP]]
-ticker = "PBJ"
-name   = "Food & Beverage"
+ticker       = "PBJ"
+name         = "Food & Beverage"
+tv_industries = ["Beverages: Non-Alcoholic", "Beverages: Alcoholic", "Food: Specialty/Candy"]
 
 [[industry_groups.XLP]]
-ticker = "IYK"
-name   = "Consumer Staples (Broad)"
+ticker       = "IYK"
+name         = "Consumer Staples (Broad)"
+tv_industries = ["Consumer Non-Durables"]
 
 # ── Energy ────────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLE]]
-ticker = "XOP"
-name   = "Oil & Gas E&P"
+ticker       = "XOP"
+name         = "Oil & Gas E&P (Upstream)"
+tv_industries = ["Oil & Gas Production"]
 
 [[industry_groups.XLE]]
-ticker = "OIH"
-name   = "Oil Services"
+ticker       = "OIH"
+name         = "Oil Field Services"
+tv_industries = ["Oil & Gas Pipelines", "Oil Refining/Marketing"]
 
 [[industry_groups.XLE]]
-ticker = "AMLP"
-name   = "MLPs / Midstream"
+ticker       = "AMLP"
+name         = "MLPs / Midstream"
+tv_industries = ["Oil & Gas Pipelines"]
 
 [[industry_groups.XLE]]
-ticker = "FCG"
-name   = "Natural Gas"
+ticker       = "FCG"
+name         = "Natural Gas"
+tv_industries = ["Oil & Gas Production"]
 
 # ── Industrials ───────────────────────────────────────────────────────────────
 
 [[industry_groups.XLI]]
-ticker = "ITA"
-name   = "Aerospace & Defense"
+ticker       = "ITA"
+name         = "Aerospace & Defense"
+tv_industries = ["Aerospace & Defense"]
 
 [[industry_groups.XLI]]
-ticker = "IYT"
-name   = "Transportation"
+ticker       = "IYT"
+name         = "Transportation"
+tv_industries = ["Railroads", "Air Freight/Couriers", "Other Transportation"]
 
 [[industry_groups.XLI]]
-ticker = "PAVE"
-name   = "Infrastructure"
+ticker       = "PAVE"
+name         = "Infrastructure"
+tv_industries = ["Engineering & Construction", "Trucks/Construction/Farm Machinery", "Industrial Machinery"]
 
 [[industry_groups.XLI]]
-ticker = "BOTZ"
-name   = "Robotics & Automation"
+ticker       = "BOTZ"
+name         = "Robotics & Automation"
+tv_industries = ["Industrial Machinery", "Electronic Components"]
 
 # ── Materials ─────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLB]]
-ticker = "XME"
-name   = "Metals & Mining"
+ticker       = "XME"
+name         = "Metals & Mining"
+tv_industries = ["Steel", "Other Metals/Minerals"]
 
 [[industry_groups.XLB]]
-ticker = "GDX"
-name   = "Gold Miners"
+ticker       = "GDX"
+name         = "Gold Miners"
+tv_industries = ["Precious Metals"]
 
 [[industry_groups.XLB]]
-ticker = "LIT"
-name   = "Lithium & Battery Tech"
+ticker       = "LIT"
+name         = "Lithium & Battery Tech"
+tv_industries = ["Other Metals/Minerals"]
 
 [[industry_groups.XLB]]
-ticker = "COPX"
-name   = "Copper Miners"
+ticker       = "COPX"
+name         = "Copper Miners"
+tv_industries = ["Other Metals/Minerals"]
 
 # ── Real Estate ───────────────────────────────────────────────────────────────
 
 [[industry_groups.XLRE]]
-ticker = "VNQ"
-name   = "REITs"
+ticker       = "VNQ"
+name         = "REITs"
+tv_industries = ["Real Estate Investment Trusts"]
 
 [[industry_groups.XLRE]]
-ticker = "MORT"
-name   = "Mortgage REITs"
+ticker       = "MORT"
+name         = "Mortgage REITs"
+tv_industries = ["Real Estate Investment Trusts"]
 
 [[industry_groups.XLRE]]
-ticker = "SRVR"
-name   = "Data Center & Telecom REITs"
+ticker       = "SRVR"
+name         = "Data Center & Telecom REITs"
+tv_industries = ["Real Estate Investment Trusts"]
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 [[industry_groups.XLU]]
-ticker = "IDU"
-name   = "Electric Utilities"
+ticker       = "IDU"
+name         = "Electric Utilities"
+tv_industries = ["Electric Utilities"]
 
 [[industry_groups.XLU]]
-ticker = "ICLN"
-name   = "Clean Energy"
+ticker       = "ICLN"
+name         = "Clean Energy"
+tv_industries = ["Electric Utilities", "Electrical Products"]
 
 # ── Comm. Services ────────────────────────────────────────────────────────────
 
 [[industry_groups.XLC]]
-ticker = "XTL"
-name   = "Telecom"
+ticker       = "XTL"
+name         = "Telecom"
+tv_industries = ["Wireless Telecommunications"]
 
 [[industry_groups.XLC]]
-ticker = "PBS"
-name   = "Media"
+ticker       = "PBS"
+name         = "Media"
+tv_industries = ["Movies/Entertainment"]
 
 [[industry_groups.XLC]]
-ticker = "SOCL"
-name   = "Social Media"
+ticker       = "SOCL"
+name         = "Social Media"
+tv_industries = ["Internet Software/Services"]
 
 [[industry_groups.XLC]]
-ticker = "ESPO"
-name   = "Video Games & Esports"
+ticker       = "ESPO"
+name         = "Video Games & Esports"
+tv_industries = ["Internet Software/Services", "Packaged Software"]

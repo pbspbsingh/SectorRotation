@@ -1,3 +1,4 @@
+use askama::Template;
 /// handlers.rs — Axum route handlers
 use axum::{
     extract::{Path, Query, State},
@@ -319,16 +320,20 @@ pub struct UniverseResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SectorNode {
     ticker: String,
     name: String,
+    tv_sectors: Vec<String>,
     children: Vec<IndustryNode>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndustryNode {
     ticker: String,
     name: String,
+    tv_industries: Vec<String>,
 }
 
 pub async fn get_universe(State(state): State<SharedState>) -> Json<ApiResponse<UniverseResponse>> {
@@ -338,19 +343,26 @@ pub async fn get_universe(State(state): State<SharedState>) -> Json<ApiResponse<
     let sectors = cfg
         .sectors
         .iter()
-        .map(|(sec_ticker, sec_name)| {
+        .map(|sec| {
             let children = cfg
-                .industry_pairs_for(sec_ticker)
-                .into_iter()
-                .map(|(t, n)| IndustryNode {
-                    ticker: t.to_string(),
-                    name: n.to_string(),
+                .industry_groups
+                .get(&sec.ticker)
+                .map(|entries| {
+                    entries
+                        .iter()
+                        .map(|e| IndustryNode {
+                            ticker: e.ticker.clone(),
+                            name: e.name.clone(),
+                            tv_industries: e.tv_industries.clone(),
+                        })
+                        .collect()
                 })
-                .collect();
+                .unwrap_or_default();
 
             SectorNode {
-                ticker: sec_ticker.clone(),
-                name: sec_name.clone(),
+                ticker: sec.ticker.clone(),
+                name: sec.name.clone(),
+                tv_sectors: sec.tv_sectors.clone(),
                 children,
             }
         })
@@ -450,4 +462,32 @@ pub async fn post_refresh(
         },
         Some(now),
     ))
+}
+
+pub async fn tv_mapping(State(state): State<SharedState>) -> String {
+    #[derive(Debug, Template)]
+    #[template(path = "tv_mapping.html")]
+    struct TradingViewMap {
+        sectors: Vec<(String, String, String)>,
+        industries: Vec<(String, String, String)>,
+    }
+
+    let config = &state.read().await.config;
+    let sectors = config
+        .sectors
+        .iter()
+        .map(|t| (t.name.clone(), t.ticker.clone(), t.tv_sectors.join(", ")))
+        .collect::<Vec<_>>();
+    let industries = config
+        .industry_groups
+        .values()
+        .flat_map(|tickers| tickers.iter())
+        .map(|t| (t.name.clone(), t.ticker.clone(), t.tv_industries.join(", ")))
+        .collect::<Vec<_>>();
+
+    let tv_map = TradingViewMap {
+        sectors,
+        industries,
+    };
+    tv_map.render().unwrap_or_default()
 }

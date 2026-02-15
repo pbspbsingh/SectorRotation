@@ -15,7 +15,6 @@
 </head>
 
 <body>
-
   <header>
     <div class="logo">ROTATION<span>MONITOR</span></div>
     <div class="header-controls">
@@ -23,6 +22,7 @@
       <div class="layer-toggle">
         <button id="btn-sector" class="active" onclick="setLayer('sector')">SECTORS</button>
         <button id="btn-industry" onclick="setLayer('industry')">INDUSTRY GROUPS</button>
+        <button id="btn-mapping" onclick="setLayer('mapping')">TV MAPPING</button>
       </div>
     </div>
     <div class="header-right">
@@ -45,7 +45,6 @@
   </div>
 
   <div class="main">
-
     <!-- LEFT: HIERARCHY TREE -->
     <div class="left-panel">
       <div class="panel-header">Universe</div>
@@ -84,6 +83,13 @@
           <div class="empty-state">Load data to view Z-scores</div>
         </div>
       </div>
+
+      <div class="tab-content" id="tab-mapping">
+        <div class="mapping-scroll" id="mapping-content">
+          <div class="empty-state">Loading...</div>
+        </div>
+      </div>
+
     </div>
 
     <!-- RIGHT: DETAIL PANEL -->
@@ -96,11 +102,8 @@
         </div>
       </div>
     </div>
-
   </div>
-
   <script src="/app.js"></script>
-
 </body>
 
 </html>

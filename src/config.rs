@@ -1,35 +1,26 @@
 /// config.rs — Load ticker universe from config.toml at startup.
-///
-/// config.toml structure:
-///
-///   benchmark = "SPY"
-///
-///   [[sectors]]
-///   ticker = "XLK"
-///   name   = "Technology"
-///
-///   [[industry_groups.XLK]]
-///   ticker = "SOXX"
-///   name   = "Semiconductors"
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 
 // ─── TOML deserialization types ───────────────────────────────────────────────
 
-/// Raw entry as it appears in the TOML file.
 #[derive(Debug, Deserialize, Clone)]
 pub struct TickerEntry {
     pub ticker: String,
     pub name: String,
+    /// TradingView FactSet sectors (populated for [[sectors]] entries)
+    #[serde(default)]
+    pub tv_sectors: Vec<String>,
+    /// TradingView FactSet industries (populated for [[industry_groups.*]] entries)
+    #[serde(default)]
+    pub tv_industries: Vec<String>,
 }
 
-/// Direct mapping of the TOML file schema.
 #[derive(Debug, Deserialize)]
 struct ConfigFile {
     benchmark: String,
     sectors: Vec<TickerEntry>,
-    /// Key = sector ticker (e.g. "XLK"), value = list of industry group entries.
     #[serde(default)]
     industry_groups: HashMap<String, Vec<TickerEntry>>,
 }
@@ -39,16 +30,13 @@ struct ConfigFile {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub benchmark: String,
-    /// Ordered list of (ticker, name) for all sectors.
-    pub sectors: Vec<(String, String)>,
-    /// Map of sector_ticker → Vec<(industry_ticker, industry_name)>.
-    /// Preserves insertion order from the TOML file within each sector.
-    pub industry_groups: HashMap<String, Vec<(String, String)>>,
+    /// Ordered list of sector entries (preserves config.toml order).
+    pub sectors: Vec<TickerEntry>,
+    /// Map of sector_ticker → Vec<industry TickerEntry>.
+    pub industry_groups: HashMap<String, Vec<TickerEntry>>,
 }
 
 impl Config {
-    /// Load and parse config.toml from the given path.
-    /// Call once at startup; store the result in shared AppState.
     pub fn load(path: &str) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
             .with_context(|| format!("Cannot read config file: {path}"))?;
@@ -63,51 +51,33 @@ impl Config {
         for key in file.industry_groups.keys() {
             if !sector_tickers.contains(key.as_str()) {
                 anyhow::bail!(
-                    "config.toml: [industry_groups.{key}] references unknown sector ticker '{key}'. \
+                    "config.toml: [industry_groups.{key}] references unknown sector '{key}'. \
                      Add a matching [[sectors]] entry first."
                 );
             }
         }
 
-        let sectors = file
-            .sectors
-            .into_iter()
-            .map(|e| (e.ticker, e.name))
-            .collect();
-
-        let industry_groups = file
-            .industry_groups
-            .into_iter()
-            .map(|(sector, entries)| {
-                let pairs = entries.into_iter().map(|e| (e.ticker, e.name)).collect();
-                (sector, pairs)
-            })
-            .collect();
-
         Ok(Self {
             benchmark: file.benchmark,
-            sectors,
-            industry_groups,
+            sectors: file.sectors,
+            industry_groups: file.industry_groups,
         })
     }
 
     // ─── Ticker accessors ─────────────────────────────────────────────────────
 
-    /// All sector tickers (excluding benchmark).
     pub fn sector_tickers(&self) -> Vec<&str> {
-        self.sectors.iter().map(|(t, _)| t.as_str()).collect()
+        self.sectors.iter().map(|e| e.ticker.as_str()).collect()
     }
 
-    /// All industry group tickers across all sectors.
     pub fn industry_tickers(&self) -> Vec<&str> {
         self.industry_groups
             .values()
             .flatten()
-            .map(|(t, _)| t.as_str())
+            .map(|e| e.ticker.as_str())
             .collect()
     }
 
-    /// Every ticker we need to fetch: benchmark + sectors + industry groups.
     pub fn all_tickers(&self) -> Vec<&str> {
         let mut seen = std::collections::HashSet::new();
         let mut v = Vec::new();
@@ -124,50 +94,40 @@ impl Config {
 
     // ─── Pair accessors (for compute functions) ───────────────────────────────
 
-    /// Returns (ticker, name) pairs for all sectors.
+    /// (ticker, name) pairs for all sectors — used by compute functions.
     pub fn sector_pairs(&self) -> Vec<(&str, &str)> {
         self.sectors
             .iter()
-            .map(|(t, n)| (t.as_str(), n.as_str()))
+            .map(|e| (e.ticker.as_str(), e.name.as_str()))
             .collect()
     }
 
-    /// Returns (ticker, name) pairs for all industry groups (flattened).
+    /// (ticker, name) pairs for all industry groups (flattened).
     pub fn industry_pairs(&self) -> Vec<(&str, &str)> {
         self.industry_groups
             .values()
             .flatten()
-            .map(|(t, n)| (t.as_str(), n.as_str()))
+            .map(|e| (e.ticker.as_str(), e.name.as_str()))
             .collect()
-    }
-
-    /// Returns industry group pairs that belong to a specific sector.
-    pub fn industry_pairs_for(&self, sector_ticker: &str) -> Vec<(&str, &str)> {
-        self.industry_groups
-            .get(sector_ticker)
-            .map(|v| v.iter().map(|(t, n)| (t.as_str(), n.as_str())).collect())
-            .unwrap_or_default()
     }
 
     // ─── Lookup helpers ───────────────────────────────────────────────────────
 
-    /// Human-readable name for any ticker (sector or industry group).
     pub fn name_of(&self, ticker: &str) -> Option<&str> {
         self.sectors
             .iter()
-            .find(|(t, _)| t == ticker)
-            .map(|(_, n)| n.as_str())
+            .find(|e| e.ticker == ticker)
+            .map(|e| e.name.as_str())
             .or_else(|| {
                 self.industry_groups
                     .values()
                     .flatten()
-                    .find(|(t, _)| t == ticker)
-                    .map(|(_, n)| n.as_str())
+                    .find(|e| e.ticker == ticker)
+                    .map(|e| e.name.as_str())
             })
     }
 
-    /// Returns true if the ticker is a sector (not an industry group).
     pub fn is_sector(&self, ticker: &str) -> bool {
-        self.sectors.iter().any(|(t, _)| t == ticker)
+        self.sectors.iter().any(|e| e.ticker == ticker)
     }
 }
